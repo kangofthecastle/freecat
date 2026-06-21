@@ -30,4 +30,10 @@ describe('profile repository', () => {
     const reread = await getOrCreateProfile(db)
     expect(reread.displayName).toBe('Warren')
   })
+
+  it('creates the profile when setProfileName is called first', async () => {
+    const updated = await setProfileName(db, 'Warren')
+    expect(updated.id).toBeGreaterThan(0)
+    expect(updated.displayName).toBe('Warren')
+  })
 })
