@@ -54,6 +54,7 @@
   "private": true,
   "description": "Open-source local-first MCAT study app",
   "main": "./out/main/index.js",
+  "engines": { "node": ">=20.19.0" },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -64,7 +65,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.0"
@@ -75,9 +76,9 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.0",
     "electron": "^33.0.0",
-    "electron-vite": "^2.3.0",
+    "electron-vite": "^5.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
