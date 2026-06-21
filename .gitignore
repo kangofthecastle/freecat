@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build / packaging output
+dist/
+out/
+build/
+release/
+*.tsbuildinfo
+
+# Local app data / databases
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
