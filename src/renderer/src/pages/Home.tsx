@@ -4,7 +4,13 @@ export default function Home(): React.JSX.Element {
   const [name, setName] = useState<string>('…')
 
   useEffect(() => {
-    window.freecat.profile.get().then((p) => setName(p.displayName))
+    window.freecat.profile
+      .get()
+      .then((p) => setName(p.displayName))
+      .catch((err) => {
+        console.error('Failed to load profile', err)
+        setName('Student')
+      })
   }, [])
 
   return (

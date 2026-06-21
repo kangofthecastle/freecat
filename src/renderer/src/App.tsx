@@ -25,6 +25,7 @@ export default function App(): React.JSX.Element {
           <button
             key={key}
             onClick={() => setRoute(key)}
+            aria-current={route === key ? 'page' : undefined}
             className={`block w-full text-left px-3 py-2 rounded ${
               route === key ? 'bg-blue-600 text-white' : 'hover:bg-gray-200'
             }`}
