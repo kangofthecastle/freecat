@@ -456,11 +456,11 @@ import type { DB } from '../db/client'
 import { profile, type Profile } from '../db/schema'
 
 export async function getOrCreateProfile(db: DB): Promise<Profile> {
-  const existing = await db.select().from(profile).limit(1)
+  const existing = await db.select().from(profile).orderBy(profile.id).limit(1)
   if (existing.length > 0) return existing[0]
 
   await db.insert(profile).values({})
-  const created = await db.select().from(profile).limit(1)
+  const created = await db.select().from(profile).orderBy(profile.id).limit(1)
   return created[0]
 }
 
@@ -563,7 +563,7 @@ contextBridge.exposeInMainWorld('freecat', api)
 interface ProfileDto {
   id: number
   displayName: string
-  createdAt: number
+  createdAt: Date
 }
 
 declare global {
@@ -797,6 +797,6 @@ git commit -m "feat: app shell, navigation, stub pages, and profile wired throug
 ## Self-review notes
 
 - **Spec coverage (Plan 1 subset):** Foundation-spec criteria #1, #2, #7 are covered by Task 8 (boot + nav + first-run profile) and the IPC layer (Task 7). Criteria #3–#6 (taxonomy, content pipeline, gamification, packaging) are explicitly deferred to Plans 2–4.
-- **Type consistency:** `DB`, `Profile`, `getOrCreateProfile`, `setProfileName`, `registerProfileIpc`, and `setNameSchema` are defined once and referenced consistently. The renderer's `ProfileDto` mirrors `Profile` (serialized over IPC: `createdAt` becomes a number).
+- **Type consistency:** `DB`, `Profile`, `getOrCreateProfile`, `setProfileName`, `registerProfileIpc`, and `setNameSchema` are defined once and referenced consistently. The renderer's `ProfileDto` mirrors `Profile`; over Electron IPC (structured clone) `createdAt` remains a `Date`.
 - **Driver note:** uses `drizzle-orm/libsql` + `@libsql/client` (not better-sqlite3) — see the plan header for rationale. The charter and Foundation spec are updated to match.
 - **Deferred to packaging plan:** prod resolution/bundling of the `drizzle/` migrations folder (handled in `migrationsFolder()` already, verified when packaged) and unpacking native deps from the asar.
