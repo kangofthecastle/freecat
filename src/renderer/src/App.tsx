@@ -1,3 +1,41 @@
+import { useState } from 'react'
+import Home from './pages/Home'
+import Qbank from './pages/Qbank'
+import ContentReview from './pages/ContentReview'
+import Flashcards from './pages/Flashcards'
+
+const ROUTES = {
+  home: { label: 'Home', component: Home },
+  qbank: { label: 'Qbank', component: Qbank },
+  content: { label: 'Content Review', component: ContentReview },
+  flashcards: { label: 'Flashcards', component: Flashcards }
+} as const
+
+type RouteKey = keyof typeof ROUTES
+
 export default function App(): React.JSX.Element {
-  return <h1 className="text-3xl font-bold text-blue-600 p-8">FreeCAT</h1>
+  const [route, setRoute] = useState<RouteKey>('home')
+  const Active = ROUTES[route].component
+
+  return (
+    <div className="flex h-screen">
+      <nav className="w-48 bg-gray-100 p-4 space-y-1">
+        <div className="text-lg font-bold text-blue-600 mb-4">FreeCAT</div>
+        {(Object.keys(ROUTES) as RouteKey[]).map((key) => (
+          <button
+            key={key}
+            onClick={() => setRoute(key)}
+            className={`block w-full text-left px-3 py-2 rounded ${
+              route === key ? 'bg-blue-600 text-white' : 'hover:bg-gray-200'
+            }`}
+          >
+            {ROUTES[key].label}
+          </button>
+        ))}
+      </nav>
+      <main className="flex-1 overflow-auto">
+        <Active />
+      </main>
+    </div>
+  )
 }
