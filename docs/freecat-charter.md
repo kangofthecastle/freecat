@@ -69,13 +69,15 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 
 - **Foundation (Phase 0).** The Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer, the MCAT taxonomy, the authored-content pipeline (format + Zod validation + CI + bundling), the ported gamification layer, and the app shell / design system with stubbed module screens. Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md`. **Must be built first.**
 
-- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. Practice sessions, answering + explanation flow, passage-based question sets, flagging and reviewing, per-topic performance — all tagged against the shared taxonomy and feeding gamification. Handoff: `docs/handoffs/qbank.md`.
+- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. Practice sessions, answering + explanation flow, passage-based question sets, flagging and reviewing, per-topic performance — all tagged against the shared taxonomy and feeding gamification.
 
-- **Module 2 — Content Review** (lessons). Readable topic lessons from bundled content files, tightly cross-linked to the Qbank through the shared taxonomy (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification. Handoff: `docs/handoffs/content-review.md`.
+- **Module 2 — Content Review** (lessons). Readable topic lessons from bundled content files, tightly cross-linked to the Qbank through the shared taxonomy (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification.
 
-- **Module 3 — Flashcards** (deep Anki). A faithful local Anki reviewer: import `.apkg`/`.colpkg`, render arbitrary note types, schedule with FSRS. The most self-contained module — its content is user-imported, so it integrates loosely (tag-based) rather than through the authored-content pipeline. Handoff: `docs/handoffs/flashcards.md`.
+- **Module 3 — Flashcards** (deep Anki). A faithful local Anki reviewer; the most self-contained module — its content is user-imported (bring-your-own decks), so it integrates loosely (tag-based) rather than through the authored-content pipeline. **Deep-B scope:** import `.apkg`/`.colpkg` (legacy and modern zstd/protobuf formats), general note-type/template rendering, cloze, media (image + audio), MathJax, tags + deck/subdeck tree, **FSRS** scheduling, honoring a deck's existing scheduling history when present, and **image occlusion** (the single biggest lift). Out: AnkiWeb sync, export to `.apkg`, filtered decks, arbitrary add-ons. (`ts-fsrs` is a candidate library; sat-world's `src/lib/srs/*` is a reference/fallback, not FSRS.)
 
 **Recommended build order:** Foundation → Qbank → Content Review → Flashcards. After the Foundation, order is flexible.
+
+_Per-module handoff briefs (in `docs/handoffs/`) are authored just-in-time — after the Foundation spec has gone through `writing-plans` and the shared contracts are concrete — so each references real interfaces rather than provisional ones. The module briefs above are the durable record until then._
 
 ## 5. Shared contracts
 
@@ -151,7 +153,7 @@ Code is **MIT** (`LICENSE`); content is **CC BY-SA 4.0** (`CONTENT-LICENSE.md`).
 
 Each work session — including each module — follows the superpowers flow:
 
-1. **Read this charter**, then the relevant `docs/handoffs/<module>.md`.
+1. **Read this charter**, then (for a module) its handoff brief in `docs/handoffs/`, once that brief has been authored.
 2. **Brainstorm** the module's internal design (`superpowers:brainstorming`) → write its spec to `docs/superpowers/specs/`.
 3. **Plan** it (`superpowers:writing-plans`).
 4. **Execute** with review checkpoints (`superpowers:executing-plans` / `subagent-driven-development`).

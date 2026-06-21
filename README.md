@@ -22,7 +22,7 @@ All progress lives in a single local SQLite file. FreeCAT is distributed as a on
 | Path | What |
 | --- | --- |
 | `docs/freecat-charter.md` | Project charter — vision, architecture, shared contracts, build order |
-| `docs/handoffs/` | Per-module kickoff briefs (Qbank, Content Review, Flashcards) |
+| `docs/handoffs/` | Per-module kickoff briefs — authored once the Foundation is planned |
 | `docs/superpowers/specs/` | Detailed design specs (Foundation first) |
 | `content/` | Authored question / lesson content (YAML + Markdown + images) |
 
