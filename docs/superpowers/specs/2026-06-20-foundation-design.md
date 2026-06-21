@@ -25,8 +25,8 @@ Each component lists **purpose / interface / dependencies**.
 
 ### C2 — SQLite + Drizzle + migrations + first-run profile
 - **Purpose:** the local datastore.
-- **Interface:** Drizzle client (`drizzle-orm/better-sqlite3`) opening one DB file in Electron's `userData` dir; `drizzle-kit` for migration generation; a startup migrator that applies pending migrations; first-run logic that creates the single `profile` row.
-- **Depends on:** C1. **Note:** `better-sqlite3` is a native module — must be rebuilt against Electron's ABI (electron-rebuild / electron-vite handling).
+- **Interface:** Drizzle client (`drizzle-orm/libsql` + `@libsql/client`) opening one DB file in Electron's `userData` dir; `drizzle-kit` for migration generation; a startup migrator that applies pending migrations; first-run logic that creates the single `profile` row.
+- **Depends on:** C1. **Note:** libsql ships N-API prebuilt binaries (ABI-stable), so it loads under both Electron and plain-Node Vitest with no per-ABI rebuild — only the platform-correct binary must be packaged (handled in C8).
 
 ### C3 — Typed IPC data layer
 - **Purpose:** the only path from renderer to database.
@@ -121,7 +121,7 @@ Modules add their own tables and migrations later; they never alter the meaning 
 
 ## Risks & notes
 
-- **Native module rebuild:** `better-sqlite3` must match Electron's ABI; bake electron-rebuild into the build early to avoid late surprises.
+- **Native dependency packaging:** libsql is N-API (no per-ABI rebuild), but the platform-correct prebuilt binary must be included and unpacked from the asar at packaging time (C8); verify on a packaged build early.
 - **Content path resolution:** dev (repo) vs prod (`process.resourcesPath`) divergence is a classic Electron bug — abstract it behind one resolver and test the packaged build.
 - **Cross-OS builds:** build natively per-OS in CI; treat local Windows builds from macOS as unsupported.
 - **Unsigned warnings:** acceptable for now, but document the click-through for users in the README at release time.

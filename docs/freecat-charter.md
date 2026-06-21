@@ -36,7 +36,7 @@ Guiding principles:
 | Renderer | **Vite + React** (NOT Next.js) |
 | Language | TypeScript |
 | Styling / UI | Tailwind CSS v4 + components ported from sat-world |
-| Database | **SQLite**, one file in Electron's `userData` dir, via **Drizzle ORM** (`drizzle-orm/better-sqlite3`) |
+| Database | **SQLite**, one file in Electron's `userData` dir, via **Drizzle ORM** (`drizzle-orm/libsql` + `@libsql/client` — N-API prebuilt, no per-ABI rebuild) |
 | Data access | Drizzle runs in the **Electron main process**; the renderer reaches it only through a **typed IPC bridge** (preload + `contextBridge`) |
 | Auth | **None.** Single local profile created on first run |
 | Validation | **Zod** (shared between content pipeline and IPC payloads) |
