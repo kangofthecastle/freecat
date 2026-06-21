@@ -169,7 +169,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -601,7 +601,7 @@ git commit -m "feat: typed profile IPC with Zod validation (TDD)"
 Replace the file with:
 
 ```ts
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
@@ -616,7 +616,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -645,6 +645,9 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+}).catch((err) => {
+  dialog.showErrorBox('FreeCAT failed to start', String(err))
+  app.quit()
 })
 
 app.on('window-all-closed', () => {
