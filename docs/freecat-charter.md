@@ -108,9 +108,13 @@ One SQLite file, one Drizzle schema, split by ownership:
 
 Modules add their own tables and migrations; they reference Foundation tables by id but never alter Foundation-owned tables' meaning.
 
+**Repository convention:** data access lives in `src/main/repositories/*` functions that take the `DB` as a parameter (electron-free, so they're unit-testable against an in-memory libsql DB). Repositories use Drizzle `.returning()` on insert/update (not insert-then-select), and the project runs with TypeScript `noUncheckedIndexedAccess` enabled — so destructure query rows and narrow by guard-and-throw (`const [row] = await …; if (!row) throw …`) rather than unchecked `[0]` access or `!` assertions. Modules follow both.
+
 ### 5.3 IPC data-layer contract
 
 The renderer never touches the database directly. The main process exposes namespaced, typed, async operations through the preload `contextBridge` (e.g. `window.freecat.gamification.recordActivity(...)`, `window.freecat.qbank.startSession(...)`). Payloads are validated with Zod at the boundary. Each module adds its own namespace following this pattern.
+
+**Hardening to adopt when the second namespace is added** (lessons from the Foundation's `profile` IPC): introduce a shared module (e.g. `src/shared/`) holding (1) plain DTO types consumed by main, preload, and renderer, and (2) channel-name constants — and give the preload's exposed `api` an explicit type tied to the renderer's `window.freecat` contract, so the preload↔renderer shape is statically enforced instead of hand-asserted (today `ProfileDto` and the channel strings are duplicated by hand). **IPC error convention:** handlers validate with Zod and throw on invalid input (rejecting the `invoke` promise); thrown errors (including `ZodError`) do not survive structured-clone IPC with their structure intact, so renderers must treat a validation rejection as a generic failure unless/until a structured `{ ok, data | error }` result envelope is deliberately adopted.
 
 ### 5.4 Gamification API
 
