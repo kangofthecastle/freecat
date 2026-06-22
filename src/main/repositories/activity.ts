@@ -86,3 +86,13 @@ async function activeDayKeys(db: Exec): Promise<Set<string>> {
   const rows = await db.select({ k: dailyActivity.dayKey }).from(dailyActivity).where(gt(dailyActivity.count, 0))
   return new Set(rows.map((r) => r.k))
 }
+
+/** First-run: if there's no pet, no egg, and no activity yet, grant one free incubating egg so
+ *  studying immediately makes visible progress toward a first hatch. Idempotent. */
+export async function ensureStarterGrant(db: DB): Promise<void> {
+  const [pet] = await db.select({ id: pets.id }).from(pets).limit(1)
+  const [egg] = await db.select({ id: eggs.id }).from(eggs).limit(1)
+  const [act] = await db.select({ k: dailyActivity.dayKey }).from(dailyActivity).limit(1)
+  if (pet || egg || act) return
+  await db.insert(eggs).values({ status: 'incubating', acquiredAt: new Date() })
+}

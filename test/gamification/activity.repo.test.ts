@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
-import { recordActivity, getStreak, getDailyProgress } from '../../src/main/repositories/activity'
+import { recordActivity, getStreak, getDailyProgress, ensureStarterGrant } from '../../src/main/repositories/activity'
 import { getState } from '../../src/main/repositories/gamification-state'
 import { eggs, pets, dailyActivity } from '../../src/main/db/schema'
 import { REWARDS_CONFIG } from '../../src/shared/gamification/config'
@@ -57,5 +57,24 @@ describe('recordActivity', () => {
   it('succeeds with no egg and no pet', async () => {
     const r = await recordActivity(db, { kind: 'q', count: 1, now: NOW, tz: TZ })
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('ensureStarterGrant', () => {
+  it('grants one incubating egg on a fresh profile', async () => {
+    await ensureStarterGrant(db)
+    const rows = await db.select().from(eggs)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.status).toBe('incubating')
+  })
+  it('is idempotent (second call is a no-op)', async () => {
+    await ensureStarterGrant(db)
+    await ensureStarterGrant(db)
+    expect(await db.select().from(eggs)).toHaveLength(1)
+  })
+  it('does nothing once any activity exists', async () => {
+    await recordActivity(db, { kind: 'q', count: 1, now: NOW, tz: TZ })
+    await ensureStarterGrant(db)
+    expect(await db.select().from(eggs)).toHaveLength(0)
   })
 })
