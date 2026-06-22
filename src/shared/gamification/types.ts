@@ -2,6 +2,7 @@ export type MoodLevel = 'happy' | 'sleeping' | 'sad' | 'angry'
 export type CoinReason = 'activity' | 'daily_goal' | 'spend_egg' | 'spend_treat' | 'spend_item'
 export type Rarity = 'common' | 'uncommon' | 'rare'
 export type AccessorySlot = 'head' | 'face' | 'neck'
+export type EggStatus = 'incubating' | 'ready' | 'hatched'
 
 export interface MoodState {
   value: number // 0..100

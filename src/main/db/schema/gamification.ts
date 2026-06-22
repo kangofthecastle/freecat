@@ -1,6 +1,6 @@
 import { sqliteTable, integer, text, uniqueIndex, index, check } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
-import type { CoinReason, Rarity } from '../../../shared/gamification/types'
+import type { CoinReason, EggStatus, Rarity } from '../../../shared/gamification/types'
 
 // Singleton (id is always 1): the spendable coin balance + lifetime XP.
 export const gamificationState = sqliteTable('gamification_state', {
@@ -42,7 +42,7 @@ export const pets = sqliteTable('pets', {
 export const eggs = sqliteTable('eggs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   incubationPoints: integer('incubation_points').notNull().default(0),
-  status: text('status').$type<'incubating' | 'ready' | 'hatched'>().notNull().default('incubating'),
+  status: text('status').$type<EggStatus>().notNull().default('incubating'),
   hatchedPetId: integer('hatched_pet_id').references(() => pets.id, { onDelete: 'set null' }),
   acquiredAt: integer('acquired_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   hatchedAt: integer('hatched_at', { mode: 'timestamp' })
