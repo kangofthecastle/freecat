@@ -8,13 +8,6 @@
       "when": 1782030379511,
       "tag": "0000_long_orphan",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1782104978227,
-      "tag": "0001_premium_lila_cheney",
-      "breakpoints": true
     }
   ]
 }
