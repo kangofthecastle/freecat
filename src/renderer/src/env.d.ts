@@ -1,17 +1,8 @@
-interface ProfileDto {
-  id: number
-  displayName: string
-  createdAt: Date
-}
+import type { FreecatApi } from '../../shared/api'
 
 declare global {
   interface Window {
-    freecat: {
-      profile: {
-        get: () => Promise<ProfileDto>
-        setName: (name: string) => Promise<ProfileDto>
-      }
-    }
+    freecat: FreecatApi
   }
 }
 
