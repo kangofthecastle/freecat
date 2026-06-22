@@ -108,6 +108,8 @@ One SQLite file, one Drizzle schema, split by ownership:
 
 Modules add their own tables and migrations; they reference Foundation tables by id but never alter Foundation-owned tables' meaning.
 
+**Repository convention:** data access lives in `src/main/repositories/*` functions that take the `DB` as a parameter (electron-free, so they're unit-testable against an in-memory libsql DB). Repositories use Drizzle `.returning()` on insert/update (not insert-then-select), and the project runs with TypeScript `noUncheckedIndexedAccess` enabled — so destructure query rows and narrow by guard-and-throw (`const [row] = await …; if (!row) throw …`) rather than unchecked `[0]` access or `!` assertions. Modules follow both.
+
 ### 5.3 IPC data-layer contract
 
 The renderer never touches the database directly. The main process exposes namespaced, typed, async operations through the preload `contextBridge` (e.g. `window.freecat.gamification.recordActivity(...)`, `window.freecat.qbank.startSession(...)`). Payloads are validated with Zod at the boundary. Each module adds its own namespace following this pattern.
