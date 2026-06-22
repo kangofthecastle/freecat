@@ -12,8 +12,8 @@ export const recordActivitySchema = z.object({
 })
 export const itemKeySchema = z.string().min(1).max(64)
 export const petIdSchema = z.number().int().positive()
-export const renameSchema = z.object({ petId: z.number().int().positive(), name: z.string().max(24) })
-const equipSchema = z.object({ petId: z.number().int().positive(), itemKey: z.string().min(1).max(64) })
+export const renameSchema = z.object({ petId: z.number().int().positive(), name: z.string().trim().max(24) })
+export const equipSchema = z.object({ petId: z.number().int().positive(), itemKey: z.string().min(1).max(64) })
 
 export function registerGamificationIpc(db: DB): void {
   ipcMain.handle(CH.gamGetState, () => getGamificationState(db, new Date(), appTz()))

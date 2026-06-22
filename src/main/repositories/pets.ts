@@ -59,7 +59,7 @@ export async function buyItem(db: DB, itemKey: string, now: Date): Promise<Servi
   })
 }
 
-export async function hatchEgg(db: DB, now: Date, rng: Rng = Math.random): Promise<ServiceResult<PetView>> {
+export async function hatchEgg(db: DB, now: Date, rng: Rng = Math.random, tz = appTz()): Promise<ServiceResult<PetView>> {
   return db.transaction(async (tx) => {
     const [egg] = await tx.select().from(eggs).where(eq(eggs.status, 'ready'))
     if (!egg || !isReady(egg.incubationPoints)) return err('not-ready')
@@ -71,16 +71,16 @@ export async function hatchEgg(db: DB, now: Date, rng: Rng = Math.random): Promi
     }).returning()
     if (!pet) throw new Error('hatch failed to create pet')
     await tx.update(eggs).set({ status: 'hatched', hatchedPetId: pet.id, hatchedAt: now }).where(eq(eggs.id, egg.id))
-    return ok(toView(pet, now, appTz()))
+    return ok(toView(pet, now, tz))
   })
 }
 
-export async function setActivePet(db: DB, petId: number): Promise<ServiceResult<null>> {
+export async function setActivePet(db: DB, petId: number, now = new Date()): Promise<ServiceResult<null>> {
   return db.transaction(async (tx) => {
     const [pet] = await tx.select().from(pets).where(eq(pets.id, petId))
     if (!pet) return err('not-found')
     await tx.update(pets).set({ isActive: false }).where(eq(pets.isActive, true))
-    await tx.update(pets).set({ isActive: true, baseHappiness: REWARDS_CONFIG.happinessStart, lastInteractionAt: new Date() }).where(eq(pets.id, petId))
+    await tx.update(pets).set({ isActive: true, baseHappiness: REWARDS_CONFIG.happinessStart, lastInteractionAt: now }).where(eq(pets.id, petId))
     return ok(null)
   })
 }
