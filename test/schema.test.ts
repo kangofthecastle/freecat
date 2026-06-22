@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { sql } from 'drizzle-orm'
-import { createDb, type DB } from '../src/main/db/client'
-import { runMigrations } from '../src/main/db/migrate'
+import { type DB } from '../src/main/db/client'
+import { createTestDb } from './helpers/db'
 
 let db: DB
 beforeEach(async () => {
-  db = createDb(':memory:')
-  await runMigrations(db, 'drizzle')
+  db = await createTestDb()
 })
 
 describe('gamification schema', () => {

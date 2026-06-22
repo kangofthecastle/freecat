@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { createDb, type DB } from '../../src/main/db/client'
-import { runMigrations } from '../../src/main/db/migrate'
+import { type DB } from '../../src/main/db/client'
+import { createTestDb } from '../helpers/db'
 import { getState, credit, spend } from '../../src/main/repositories/gamification-state'
 import { coinLedger } from '../../src/main/db/schema'
 
 let db: DB
-beforeEach(async () => { db = createDb(':memory:'); await runMigrations(db, 'drizzle') })
+beforeEach(async () => { db = await createTestDb() })
 
 describe('gamification-state repository', () => {
   it('lazily reports 0 coins / 0 xp before any credit', async () => {
