@@ -2,7 +2,7 @@
 
 > **This is the single set of goals for FreeCAT. Read it in full before starting any work session, then read the relevant module handoff in `docs/handoffs/`.** It defines what we are building, the architecture every module shares, and the contracts that let the modules be built independently without colliding.
 
-_Last updated: 2026-06-22 · Status: Foundation app skeleton built (PR #1). The MCAT taxonomy + authored-content pipeline are deferred — defined in the Qbank brainstorm (§5.1, §5.5), not pre-built._
+_Last updated: 2026-06-22 · Status: Foundation app skeleton built (PR #1); gamification layer built (`feat/gamification-port`, separate PR). The MCAT taxonomy + authored-content pipeline are deferred — defined in the Qbank brainstorm (§5.1, §5.5), not pre-built._
 
 ---
 
@@ -67,7 +67,7 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 
 ### Module briefs
 
-- **Foundation (Phase 0).** The module-agnostic substrate only: the Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer + repository convention, the ported gamification layer, and the app shell / design system with stubbed module screens. (The MCAT taxonomy + authored-content pipeline are **not** here — see §5.1 / §5.5.) Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md` (now aligned with this division). **The app skeleton is built (PR #1);** the gamification port is the remaining module-agnostic piece.
+- **Foundation (Phase 0).** The module-agnostic substrate only: the Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer + repository convention, the ported gamification layer, and the app shell / design system with stubbed module screens. (The MCAT taxonomy + authored-content pipeline are **not** here — see §5.1 / §5.5.) Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md` (now aligned with this division). **The app skeleton is built (PR #1) and the gamification layer is built (`feat/gamification-port`);** packaging/release CI (C8) is the remaining module-agnostic piece.
 
 - **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. **Qbank defines the shared content model in its brainstorm (with Warren) — the MCAT taxonomy and the authored-content pipeline — which Content Review then reuses.** Known so far: exactly **4 answer choices**, **passage-based + standalone** questions, **some with photos**. Plus practice sessions, answer + explanation flow, flagging/review, per-topic performance — feeding gamification. See `docs/handoffs/qbank.md`.
 
