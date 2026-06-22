@@ -1,17 +1,24 @@
 import { useState } from 'react'
 import Home from './pages/Home'
+import Nest from './pages/Nest'
 import Qbank from './pages/Qbank'
 import ContentReview from './pages/ContentReview'
 import Flashcards from './pages/Flashcards'
 
 const ROUTES = {
   home: { label: 'Home', component: Home },
+  nest: { label: 'Nest', component: Nest },
   qbank: { label: 'Qbank', component: Qbank },
   content: { label: 'Content Review', component: ContentReview },
   flashcards: { label: 'Flashcards', component: Flashcards }
 } as const
 
-type RouteKey = keyof typeof ROUTES
+export type RouteKey = keyof typeof ROUTES
+
+/** Pages may opt into navigation (e.g. Home → Nest) by accepting this prop. */
+export interface PageProps {
+  navigate?: (key: RouteKey) => void
+}
 
 export default function App(): React.JSX.Element {
   const [route, setRoute] = useState<RouteKey>('home')
@@ -35,7 +42,7 @@ export default function App(): React.JSX.Element {
         ))}
       </nav>
       <main className="flex-1 overflow-auto">
-        <Active />
+        <Active navigate={setRoute} />
       </main>
     </div>
   )
