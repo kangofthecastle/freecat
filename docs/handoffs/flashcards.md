@@ -20,7 +20,7 @@ A faithful, local Anki reviewer. FreeCAT provides import + rendering + spaced-re
 **Out:** AnkiWeb sync, export to `.apkg`, filtered decks, arbitrary add-ons.
 
 ## Foundation contracts you CONSUME (do not rebuild)
-- **Gamification API** — `recordActivity(...)` on reviews (§5.4)
+- **Gamification API** (built — Foundation C6, PR #3) — call `window.freecat.gamification.recordActivity({ kind: 'flashcard.review', count? })` (returns `ServiceResult<ActivityResult>`) on each review; it credits XP + coins, advances the pet/egg, and updates streak + daily goal (§5.4)
 - **IPC pattern** — `window.freecat.flashcards.*`; the ZIP parsing + imported-collection SQLite reads live in the main process (§5.3)
 - **App shell / design system** (§5.6)
 - **MCAT taxonomy** — integration is **loose** only: imported decks have their own structure, so any Qbank/lesson linking is best-effort/tag-based. Do not force imported decks into the taxonomy.
