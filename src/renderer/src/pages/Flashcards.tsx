@@ -1,4 +1,6 @@
-export default function Flashcards(): React.JSX.Element {
+import type { PageProps } from '../App'
+
+export default function Flashcards(_props: PageProps): React.JSX.Element {
   return (
     <div className="p-8">
       <h2 className="text-2xl font-bold">Flashcards</h2>

@@ -2,7 +2,7 @@
 
 > **This is the single set of goals for FreeCAT. Read it in full before starting any work session, then read the relevant module handoff in `docs/handoffs/`.** It defines what we are building, the architecture every module shares, and the contracts that let the modules be built independently without colliding.
 
-_Last updated: 2026-06-20 · Status: design phase (no app code yet)_
+_Last updated: 2026-06-22 · Status: Foundation app skeleton built (PR #1); gamification layer built (`feat/gamification-port`, separate PR). The MCAT taxonomy + authored-content pipeline are deferred — defined in the Qbank brainstorm (§5.1, §5.5), not pre-built._
 
 ---
 
@@ -53,8 +53,8 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                        FOUNDATION (Phase 0)                    │
-│  Electron+Vite shell · SQLite/Drizzle · IPC bridge · MCAT      │
-│  taxonomy · content pipeline · gamification · design system    │
+│  Electron+Vite shell · SQLite/Drizzle · IPC bridge ·           │
+│  gamification · design system · single-user profile            │
 └───────────────┬───────────────┬───────────────┬───────────────┘
                 │               │               │
         ┌───────▼──────┐ ┌──────▼───────┐ ┌─────▼────────┐
@@ -63,13 +63,13 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
         └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-**The principle that makes parallel work safe:** *every inter-module contract lives in the Foundation* (taxonomy, base DB schema, gamification API, content pipeline, navigation slots, IPC pattern). Each module owns only its own tables and screens and otherwise touches nothing but Foundation contracts. Once the Foundation is done, the three modules are genuinely independent and can be built in any order — even in separate concurrent sessions.
+**What lives where (and why parallel work is still safe):** the **module-agnostic** contracts live in the Foundation, built once up front — the base DB schema + repository/IPC conventions, the gamification API, navigation slots, and the design system. Two **shared, content-shaped** contracts — the **MCAT taxonomy** and the **authored-content pipeline** — are *not* pre-built: they encode product decisions, so they're defined in the **Qbank brainstorm** (the first content module, with Warren) and then reused by Content Review. Each module owns only its own tables and screens and otherwise consumes these shared pieces — never forking them. Consequence: **Qbank and Content Review share the content model and are sequenced Qbank-first; Flashcards is independent** (its content is imported) and can go anytime.
 
 ### Module briefs
 
-- **Foundation (Phase 0).** The Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer, the MCAT taxonomy, the authored-content pipeline (format + Zod validation + CI + bundling), the ported gamification layer, and the app shell / design system with stubbed module screens. Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md`. **Must be built first.**
+- **Foundation (Phase 0).** The module-agnostic substrate only: the Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer + repository convention, the ported gamification layer, and the app shell / design system with stubbed module screens. (The MCAT taxonomy + authored-content pipeline are **not** here — see §5.1 / §5.5.) Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md` (now aligned with this division). **The app skeleton is built (PR #1) and the gamification layer is built (`feat/gamification-port`);** packaging/release CI (C8) is the remaining module-agnostic piece.
 
-- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. Practice sessions, answering + explanation flow, passage-based question sets, flagging and reviewing, per-topic performance — all tagged against the shared taxonomy and feeding gamification.
+- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. **Qbank defines the shared content model in its brainstorm (with Warren) — the MCAT taxonomy and the authored-content pipeline — which Content Review then reuses.** Known so far: exactly **4 answer choices**, **passage-based + standalone** questions, **some with photos**. Plus practice sessions, answer + explanation flow, flagging/review, per-topic performance — feeding gamification. See `docs/handoffs/qbank.md`.
 
 - **Module 2 — Content Review** (lessons). Readable topic lessons from bundled content files, tightly cross-linked to the Qbank through the shared taxonomy (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification.
 
@@ -77,11 +77,11 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 
 **Recommended build order:** Foundation → Qbank → Content Review → Flashcards. After the Foundation, order is flexible.
 
-_Per-module handoff briefs (in `docs/handoffs/`) are authored just-in-time — after the Foundation spec has gone through `writing-plans` and the shared contracts are concrete — so each references real interfaces rather than provisional ones. The module briefs above are the durable record until then._
+_Per-module handoff briefs are in `docs/handoffs/` (`qbank.md`, `content-review.md`, `flashcards.md`) — paste-in kickoffs for each module's own session._
 
 ## 5. Shared contracts
 
-Everything in this section is owned by the Foundation. Modules consume these and must not fork them.
+Most of these are **module-agnostic** and owned by the Foundation, built once up front: the DB/schema conventions (§5.2), the IPC contract (§5.3), the gamification API (§5.4), the app shell (§5.6). Two are **shared but content-shaped** — the **taxonomy (§5.1)** and the **authored-content pipeline (§5.5)** — and are **defined in the Qbank brainstorm (with Warren), not pre-built**, then reused by Content Review. Either way, modules consume these and must not fork them.
 
 ### 5.1 MCAT taxonomy (the integration backbone)
 
@@ -95,14 +95,14 @@ A single hierarchy that questions, lessons, and (loosely) flashcards all referen
 - **CARS** has no content categories; it uses **skill** nodes (Foundations of Comprehension; Reasoning Within the Text; Reasoning Beyond the Text) over humanities / social-science passages.
 - **Cross-cutting:** the 4 Scientific Inquiry & Reasoning Skills (SIRS) and discipline tags (biochem, biology, gen-chem, org-chem, physics, psych, soc).
 
-Modeled as taxonomy nodes `{ id, kind: 'section'|'foundational_concept'|'content_category'|'skill'|'topic', code, title, parentId }`. The full set is **seeded from the published AAMC content outline** as a Foundation task. Authored content references a `contentCategory` (or `skill` for CARS) plus free-form `topics`.
+Modeled as taxonomy nodes `{ id, kind: 'section'|'foundational_concept'|'content_category'|'skill'|'topic', code, title, parentId }`, seeded from the published AAMC content outline; authored content references a `contentCategory` (or `skill` for CARS) plus free-form `topics`. **This is defined in the Qbank brainstorm (with Warren), not pre-built** — how it's used (browsing, tagging, granularity) is a product decision. A draft encoding of the full AAMC outline already exists in git history (commits `6b3880a`, `181bdec`) and can be reused as a starting point.
 
 ### 5.2 Database & schema ownership
 
 One SQLite file, one Drizzle schema, split by ownership:
 
-- **Foundation owns:** `profile`, the `taxonomy` nodes, gamification tables (pet, XP/economy, streak, daily-goal), and a content registry (metadata about loaded authored content).
-- **Qbank owns:** question attempts, practice sessions, flags.
+- **Foundation owns:** `profile` and the gamification tables (pet, XP/economy, streak, daily-goal).
+- **Qbank owns:** question attempts, practice sessions, flags. As the first content module it also **establishes the shared `taxonomy` + content-registry tables** (metadata about loaded authored content), which Content Review then reuses.
 - **Content Review owns:** lesson progress.
 - **Flashcards owns:** imported decks, notes, note types/templates, cards, media references, and per-card scheduling/review state.
 
@@ -122,13 +122,13 @@ A single interface all modules call to register study activity; the Foundation t
 
 ### 5.5 Authored-content pipeline
 
-For Qbank questions and Content Review lessons (NOT flashcards):
+For Qbank questions and Content Review lessons (NOT flashcards). **Defined in the Qbank brainstorm with Warren and reused by Content Review — not pre-built as foundation.** The shape below is the working sketch, to be finalized there:
 
 - **On disk:** one folder per item under `content/`. A structured **YAML** envelope holds the fields; **Markdown** is allowed in all prose fields (stem, choices, explanation, lesson body) and supports LaTeX math and image embeds. Images are **co-located files** referenced by relative path.
 - **Validation:** one **Zod schema per content type**; CI validates every file on each PR (missing answer, bad taxonomy code, broken image path → fail).
 - **Bundling:** the whole `content/` tree ships inside the installer as an `electron-builder` extra resource; at runtime it is read from `process.resourcesPath` (prod) or the repo (dev). No network.
 
-Canonical question shape (see the Foundation spec for the full schema):
+Sketch of a question on disk (the final schema is decided in the Qbank brainstorm):
 
 ```
 content/questions/chem-phys/0042-doppler/
@@ -157,7 +157,7 @@ Code is **MIT** (`LICENSE`); content is **CC BY-SA 4.0** (`CONTENT-LICENSE.md`).
 
 Each work session — including each module — follows the superpowers flow:
 
-1. **Read this charter**, then (for a module) its handoff brief in `docs/handoffs/`, once that brief has been authored.
+1. **Read this charter**, then (for a module) its handoff brief in `docs/handoffs/`.
 2. **Brainstorm** the module's internal design (`superpowers:brainstorming`) → write its spec to `docs/superpowers/specs/`.
 3. **Plan** it (`superpowers:writing-plans`).
 4. **Execute** with review checkpoints (`superpowers:executing-plans` / `subagent-driven-development`).

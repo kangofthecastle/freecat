@@ -1,1 +1,37 @@
 @import "tailwindcss";
+
+/* ---- Pet sprite animations (ported from sat-world) ---- */
+
+/* Gentle "alive" idle — a soft breathing bob (fallback for any single-frame creature). */
+@keyframes pet-idle {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50%      { transform: translateY(-3%) scaleY(1.03); }
+}
+.pet-idle { animation: pet-idle 2.6s ease-in-out infinite; transform-origin: 50% 100%; }
+
+/* Frame-by-frame sprite animation: slide a horizontal strip one frame at a time. The shift distance
+   (one strip width) is passed per-element via --pet-strip-shift; steps() count is set inline. */
+@keyframes pet-sprite {
+  from { transform: translateX(0); }
+  to   { transform: translateX(var(--pet-strip-shift)); }
+}
+
+/* Treat time: a quick chewing squash + a cookie that pops in and is nibbled away over ~2s. */
+@keyframes pet-eating {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50%      { transform: translateY(1.5%) scaleY(0.95); }
+}
+.pet-eating { animation: pet-eating 0.32s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes treat-eat {
+  0%   { transform: translate(-50%, -50%) scale(0) rotate(-12deg); opacity: 0; }
+  12%  { transform: translate(-50%, -50%) scale(1) rotate(-12deg); opacity: 1; }
+  45%  { transform: translate(-50%, -42%) scale(0.78) rotate(6deg); opacity: 1; }
+  75%  { transform: translate(-50%, -34%) scale(0.5) rotate(-4deg); opacity: 1; }
+  100% { transform: translate(-50%, -28%) scale(0) rotate(8deg); opacity: 0; }
+}
+.treat-eat { animation: treat-eat 2.2s ease-in-out forwards; transform-origin: 50% 50%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-idle, .pet-eating, .pet-sprite { animation: none !important; }
+  .treat-eat { animation: none; opacity: 1; transform: translate(-50%, -50%); }
+}

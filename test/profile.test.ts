@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createDb, type DB } from '../src/main/db/client'
-import { runMigrations } from '../src/main/db/migrate'
+import { type DB } from '../src/main/db/client'
+import { createTestDb } from './helpers/db'
 import { getOrCreateProfile, setProfileName } from '../src/main/repositories/profile'
 
 let db: DB
 
 beforeEach(async () => {
-  db = createDb(':memory:')
-  await runMigrations(db, 'drizzle')
+  db = await createTestDb()
 })
 
 describe('profile repository', () => {
