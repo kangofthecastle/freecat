@@ -4,7 +4,7 @@ _Date: 2026-06-20 (updated 2026-06-22) · Project: FreeCAT · Read `docs/freecat
 
 > **Scope correction (2026-06-22):** The Foundation is the **module-agnostic substrate only**. The **MCAT taxonomy** and the **authored-content pipeline** (originally specced here as C4 and C5) have been **removed from the Foundation** — they're content-shaped contracts defined in the **Qbank brainstorm** (with Warren) and reused by Content Review (charter §5.1 / §5.5).
 >
-> **Built & shipped (PR #1):** C1 skeleton · C2 DB + profile · C3 IPC · C7 app shell + nav + stubs (plus Tailwind, Vitest, the repository convention). **Remaining Foundation work:** C6 gamification port · C8 packaging/release CI · the rest of C9 repo hygiene.
+> **Built & shipped (PR #1):** C1 skeleton · C2 DB + profile · C3 IPC · C7 app shell + nav + stubs (plus Tailwind, Vitest, the repository convention). **C6 gamification port — built** on `feat/gamification-port` (its own PR): pet/coins/XP/streak/daily-goal + egg→hatch collection + Nest screen, 79 tests. **Remaining Foundation work:** C8 packaging/release CI · the rest of C9 repo hygiene.
 
 ## Goal
 
@@ -40,12 +40,13 @@ Each component lists **purpose / interface / dependencies**.
 ### C4 & C5 — REMOVED → deferred to the Qbank brainstorm
 The **MCAT taxonomy** and the **authored-content pipeline** were originally specced here as Foundation components. They are *content-shaped* — they encode product decisions about how questions/lessons are structured and organized — so per the charter they're defined **with Warren in the Qbank brainstorm** (the first content module) and reused by Content Review, **not pre-built** in the Foundation. A draft taxonomy encoding (the full AAMC outline) exists in git history (commits `6b3880a`, `181bdec`) as a reusable starting point.
 
-### C6 — Gamification layer (ported) ⏳ remaining
+### C6 — Gamification layer (ported) ✅ built
 - **Purpose:** the shared pet/streak/XP/daily-goal loop all modules feed (charter §5.4).
 - **Interface:** gamification tables; a `recordActivity({ kind, count, taxonomyRef? })` operation exposed over IPC; React components for the pet, streak, XP, and daily-goal surfaces.
 - **Port from sat-world:** `src/lib/rewards/*` (economy, config, types; carry over hatch/incubation/wellbeing/catalog as desired for the core loop), `src/lib/services/{pets,rewards}.ts`, `src/actions/pets.ts` (re-homed from Next server actions to IPC handlers), and `src/components/pet/*` + `src/components/coin.tsx`. Keep the carried-over rewards unit tests.
 - **Scope to the core loop:** pet that reacts to study activity + streak + XP + daily goal. Trim SAT-specific bits (vocabulary, students/teacher).
 - **Depends on:** C2, C3, C7.
+- **Shipped (deviations from sat-world; sourced from `dev @ c99b1da`):** single local profile (no `userId`); `recordActivity({ kind, count, taxonomyRef? })` generalizes sat-world's study-queue-coupled `applyStudyRewards`; **XP and coins coexist** (XP = progression/level, coins = spendable in the shop); a **daily goal** (N activities/day, default 20) with a once-daily bonus replaces the SAT "daily-clear"; full economy kept (shop, egg→hatch collection of **six** chibi animals — the **slime** species was dropped as a regression); Postgres→SQLite (libsql transactions, no `SELECT … FOR UPDATE`); sprites bundled via a Vite glob resolver (packaging-safe) instead of `/public`; the §5.3 IPC hardening (`src/shared/` DTOs+channels+typed `FreecatApi`, `ServiceResult` envelopes) adopted; first-run starter egg.
 
 ### C7 — App shell, navigation & design system ✅ built
 - **Purpose:** the chrome modules render into.
@@ -76,7 +77,7 @@ Modules add their own tables and migrations later; they never alter the meaning 
 1. **F1** — C1 Electron+Vite skeleton boots an empty window. ✅
 2. **F2** — C2 SQLite/Drizzle + migrations + first-run profile; C3 IPC pattern (with `profile.*`). ✅
 3. **F3** — C7 shell/navigation + design system; three stubbed module routes. ✅
-4. **F4** — C6 gamification port wired through IPC and shown on the dashboard. ⏳
+4. **F4** — C6 gamification port wired through IPC and shown on the dashboard. ✅
 5. **F5** — C8 electron-builder + GitHub Actions release matrix. ⏳
 
 ## Testing
@@ -89,7 +90,7 @@ Modules add their own tables and migrations later; they never alter the meaning 
 
 1. `npm run dev` boots the app; renders the shell; navigates the three stubbed module screens. ✅
 2. On first run, the SQLite DB is created in `userData`, migrations apply, and a `profile` row exists. ✅
-3. The gamification surface renders on the dashboard and updates when a test `recordActivity` call is made over IPC. ⏳ (C6)
+3. The gamification surface renders on the dashboard and updates when a test `recordActivity` call is made over IPC. ✅ (C6)
 4. The GitHub Actions matrix produces a macOS `.dmg` + Windows `.exe` and attaches them to a Release (unsigned). ⏳ (C8)
 5. No renderer code accesses SQLite directly — all data flows through the typed IPC layer. ✅
 

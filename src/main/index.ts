@@ -3,6 +3,8 @@ import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
 import { registerProfileIpc } from './ipc/profile'
+import { registerGamificationIpc } from './ipc/gamification'
+import { ensureStarterGrant } from './repositories/activity'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -36,7 +38,9 @@ app.whenReady().then(async () => {
   const dbPath = join(app.getPath('userData'), 'freecat.db')
   const db = createDb(`file:${dbPath}`)
   await runMigrations(db, migrationsFolder())
+  await ensureStarterGrant(db)
   registerProfileIpc(db)
+  registerGamificationIpc(db)
 
   createWindow()
   app.on('activate', () => {

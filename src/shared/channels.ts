@@ -1,0 +1,14 @@
+export const CH = {
+  profileGet: 'profile:get',
+  profileSetName: 'profile:setName',
+  gamGetState: 'gamification:getState',
+  gamRecordActivity: 'gamification:recordActivity',
+  gamBuyEgg: 'gamification:buyEgg',
+  gamBuyTreat: 'gamification:buyTreat',
+  gamBuyItem: 'gamification:buyItem',
+  gamHatchEgg: 'gamification:hatchEgg',
+  gamSetActivePet: 'gamification:setActivePet',
+  gamEquipItem: 'gamification:equipItem',
+  gamUnequipItem: 'gamification:unequipItem',
+  gamRenamePet: 'gamification:renamePet'
+} as const
