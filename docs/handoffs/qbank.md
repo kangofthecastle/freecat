@@ -27,11 +27,11 @@ The core of FreeCAT: original MCAT practice questions delivered from bundled con
 - Electron + React **app shell with navigation** (Qbank has a placeholder route to fill in).
 - **Local SQLite** via Drizzle/libsql, migrations, first-run profile.
 - The **IPC pattern** (`window.freecat.<namespace>.*` with Zod validation at the main-process boundary) and the **repository convention** (electron-free, `DB`-param, `.returning()`, `noUncheckedIndexedAccess`).
+- The **gamification API** — **built** (Foundation C6, PR #3). Call `window.freecat.gamification.recordActivity({ kind: 'qbank.answer', count?, taxonomyRef? })` (returns `ServiceResult<ActivityResult>`) when a question is answered; it credits XP + coins, advances the pet/egg, and updates streak + daily goal. Don't roll your own. `taxonomyRef` can carry the question's topic for future per-topic stats.
 - A **draft taxonomy**: the AAMC outline (4 sections → foundational concepts → content categories; CARS skills) exists as a DB table + seed data + a query repository. (It's in code but not yet seeded on startup or exposed over IPC — finishing that small wiring is part of getting Qbank reading it.)
 
-## Not yet built (coordinate — these are built once, centrally)
+## You build this here (shared)
 - The **content pipeline** — you build it here (shared with Content Review).
-- The **gamification API** (`recordActivity(...)`, a port from sat-world) — when it exists, have Qbank emit study activity to it (answering questions → XP/streak). Don't roll your own.
 
 ## Tables Qbank owns
 Question attempts, practice sessions, flags. (Question *content* is files, not rows.)

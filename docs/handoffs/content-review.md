@@ -27,8 +27,8 @@ Readable MCAT topic lessons. Per Warren: it **links into Qbank but is ultimately
 - The **draft taxonomy** (the same shared backbone Qbank uses).
 - The **content pipeline that Qbank establishes** — reuse it for lessons; do **not** build a second one. (If Qbank isn't done yet, coordinate — the pipeline is shared.)
 
-## Not yet built (coordinate — built once)
-- The **gamification API** (`recordActivity(...)` on lesson completion) — emit to it when it exists; don't roll your own.
+## Gamification (built — Foundation C6, PR #3)
+- Call `window.freecat.gamification.recordActivity({ kind: 'lesson.complete', count?, taxonomyRef? })` (returns `ServiceResult<ActivityResult>`) on lesson completion; it credits XP + coins, advances the pet/egg, and updates streak + daily goal. Don't roll your own. `taxonomyRef` can carry the lesson's topic.
 
 ## Tables Content Review owns
 Lesson progress / completion. (Lesson *content* is files.)
