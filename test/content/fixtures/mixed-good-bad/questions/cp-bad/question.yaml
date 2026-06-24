@@ -1,0 +1,12 @@
+id: cp-bad-skipped
+topic: physics.does-not-exist
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'A question with an unknown topic that must be skipped, not indexed.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'The topic slug does not resolve to any seeded topic.'

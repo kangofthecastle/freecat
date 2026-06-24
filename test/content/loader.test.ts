@@ -106,6 +106,55 @@ describe('scanContent — bad trees each yield a ContentError naming the file', 
   })
 })
 
+describe('scanContent — partial-commit atomicity & isolation', () => {
+  it('rejects a whole passage atomically when one sub-question is invalid', () => {
+    // Passage bb-bad-subquestion: q1 is valid, q2 carries an unknown tag.
+    const index = scanContent(join(FIX, 'bad-passage-subquestion'))
+    // The bad sub-question's tag error is reported.
+    expect(index.errors.some((e) => /unknown tag|9Z/i.test(e.message))).toBe(true)
+    // Neither the valid sub-question nor the passage half-commits.
+    expect(index.byId.has('bb-bad-q1')).toBe(false)
+    expect(index.byId.has('bb-bad-q2')).toBe(false)
+    expect(index.passagesById.has('bb-bad-subquestion')).toBe(false)
+    expect(index.allQuestionIds).toHaveLength(0)
+  })
+
+  it('keeps a good question while skipping a bad sibling in the same scan', () => {
+    // mixed-good-bad: cp-good-survivor (valid) + cp-bad-skipped (unknown topic).
+    const index = scanContent(join(FIX, 'mixed-good-bad'))
+    // The good question is fully indexed.
+    expect(index.byId.has('cp-good-survivor')).toBe(true)
+    expect(index.allQuestionIds).toEqual(['cp-good-survivor'])
+    expect(index.byTopic.get('physics.mechanics')).toEqual(['cp-good-survivor'])
+    // The bad question is skipped (errors-only), proving "skipped" ≠ "empty index".
+    expect(index.byId.has('cp-bad-skipped')).toBe(false)
+    expect(index.errors).toHaveLength(1)
+    expect(index.errors[0]?.message).toMatch(/unknown topic|physics\.does-not-exist/i)
+  })
+
+  it('rejects a duplicate standalone question id and keeps the first-seen', () => {
+    // dup-standalone: dup-a and dup-b both declare id cp-dup-standalone.
+    const index = scanContent(join(FIX, 'dup-standalone'))
+    // First-seen (sorted dir order: dup-a) wins; only one id is indexed.
+    expect(index.byId.has('cp-dup-standalone')).toBe(true)
+    expect(index.allQuestionIds).toEqual(['cp-dup-standalone'])
+    expect(index.byId.get('cp-dup-standalone')?.topic).toBe('physics.mechanics')
+    // The duplicate is reported and not committed.
+    expect(index.errors).toHaveLength(1)
+    expect(index.errors[0]?.message).toMatch(/duplicate question id/i)
+  })
+
+  it('rejects a passage with a duplicate sub-question id (whole passage skipped)', () => {
+    // dup-passage-subquestion: bb-dup lists bb-dup-q1 twice.
+    const index = scanContent(join(FIX, 'dup-passage-subquestion'))
+    expect(index.errors.some((e) => /duplicate question id/i.test(e.message))).toBe(true)
+    // Neither occurrence nor the passage commits.
+    expect(index.byId.has('bb-dup-q1')).toBe(false)
+    expect(index.passagesById.has('bb-dup-subquestion')).toBe(false)
+    expect(index.allQuestionIds).toHaveLength(0)
+  })
+})
+
 const VALID = join(__dirname, '../fixtures/content-valid')
 const INVALID = join(__dirname, '../fixtures/content-invalid')
 const MULTI = join(__dirname, '../fixtures/content-multi')

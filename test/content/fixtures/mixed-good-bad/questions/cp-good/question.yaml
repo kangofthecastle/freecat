@@ -1,0 +1,12 @@
+id: cp-good-survivor
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'A well-formed question that must survive a sibling being skipped.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'A valid topic and tag — this question indexes normally.'

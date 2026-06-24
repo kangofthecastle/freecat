@@ -1,0 +1,12 @@
+id: cp-dup-standalone
+topic: physics.fluids
+tags:
+  - { vocab: aamc, code: '4B' }
+stem: 'The second item declaring the same id — it is rejected as a duplicate.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: B
+explanation: 'A duplicate id must not overwrite the first-seen question.'

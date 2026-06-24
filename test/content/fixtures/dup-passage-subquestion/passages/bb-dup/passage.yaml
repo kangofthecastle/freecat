@@ -1,0 +1,26 @@
+id: bb-dup-subquestion
+topic: biochem.enzymes
+tags:
+  - { vocab: aamc, code: '1A' }
+passage: |
+  A passage that lists the same sub-question id twice; the passage must be
+  rejected atomically rather than indexing a duplicate.
+questions:
+  - id: bb-dup-q1
+    stem: 'The first occurrence of this sub-question id.'
+    choices:
+      - 'a'
+      - 'b'
+      - 'c'
+      - 'd'
+    correct: A
+    explanation: 'First occurrence.'
+  - id: bb-dup-q1
+    stem: 'A duplicate sub-question id within the same passage.'
+    choices:
+      - 'a'
+      - 'b'
+      - 'c'
+      - 'd'
+    correct: B
+    explanation: 'Duplicate id — the whole passage is rejected.'
