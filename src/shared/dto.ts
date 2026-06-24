@@ -26,3 +26,46 @@ export interface GamificationState {
 }
 export interface ActivityResult { streak: number; daily: DailyProgress; eggBecameReady: boolean; goalJustMet: boolean }
 export interface RecordActivityInput { kind: string; count?: number; taxonomyRef?: string }
+
+// --- Content Review ---
+export type DisciplineKey = 'gen-chem' | 'o-chem' | 'biology' | 'biochem' | 'behavioral-sci'
+export type LessonStatus = 'not-started' | 'in-progress' | 'completed'
+
+export interface LessonSummary {
+  slug: string
+  title: string
+  discipline: DisciplineKey
+  summary?: string
+  aamcCategories: string[]
+  status: LessonStatus
+  available: boolean // false = topic exists in the taxonomy but no lesson is authored yet
+}
+export interface OutlineGroup {
+  discipline: DisciplineKey
+  title: string
+  completed: number
+  total: number // counts authored (available) lessons only
+  lessons: LessonSummary[]
+}
+export interface Outline {
+  groups: OutlineGroup[]
+  completed: number
+  total: number
+}
+export interface LessonDetail {
+  slug: string
+  title: string
+  discipline: DisciplineKey
+  aamcCategories: string[]
+  html: string
+  status: LessonStatus
+}
+export interface LessonRef {
+  slug: string
+  title: string
+  discipline: DisciplineKey
+}
+export interface MarkCompleteResult {
+  status: LessonStatus
+  activity?: ActivityResult
+}

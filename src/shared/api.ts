@@ -1,4 +1,7 @@
-import type { ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView } from './dto'
+import type {
+  ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView,
+  Outline, LessonDetail, LessonRef, MarkCompleteResult
+} from './dto'
 
 export interface FreecatApi {
   profile: { get: () => Promise<ProfileDto>; setName: (name: string) => Promise<ProfileDto> }
@@ -13,5 +16,12 @@ export interface FreecatApi {
     equipItem: (petId: number, itemKey: string) => Promise<ServiceResult<null>>
     unequipItem: (petId: number, itemKey: string) => Promise<ServiceResult<null>>
     renamePet: (petId: number, name: string) => Promise<ServiceResult<null>>
+  }
+  contentReview: {
+    getOutline: () => Promise<Outline>
+    getLesson: (slug: string) => Promise<LessonDetail | null>
+    markViewed: (slug: string) => Promise<void>
+    markComplete: (slug: string, completed: boolean) => Promise<ServiceResult<MarkCompleteResult>>
+    lessonForTaxonomy: (ref: string) => Promise<LessonRef | null>
   }
 }

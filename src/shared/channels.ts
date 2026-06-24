@@ -10,5 +10,10 @@ export const CH = {
   gamSetActivePet: 'gamification:setActivePet',
   gamEquipItem: 'gamification:equipItem',
   gamUnequipItem: 'gamification:unequipItem',
-  gamRenamePet: 'gamification:renamePet'
+  gamRenamePet: 'gamification:renamePet',
+  contentGetOutline: 'content:getOutline',
+  contentGetLesson: 'content:getLesson',
+  contentMarkViewed: 'content:markViewed',
+  contentMarkComplete: 'content:markComplete',
+  contentLessonForTaxonomy: 'content:lessonForTaxonomy'
 } as const
