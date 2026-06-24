@@ -10,22 +10,29 @@ describe('validateContentTree', () => {
     expect(errors).toEqual([])
   })
 
-  it('returns a ContentError for a tree with the wrong number of choices', () => {
+  it('returns a ContentError for an unknown topic', () => {
+    const errors = validateContentTree(join(FIX, 'bad-unknown-topic'))
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.file).toContain('question.yaml')
+    expect(errors[0]?.message).toMatch(/unknown topic|physics\.does-not-exist/i)
+  })
+
+  it('returns a ContentError for an unknown tag', () => {
+    const errors = validateContentTree(join(FIX, 'bad-unknown-tag'))
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.message).toMatch(/unknown tag|9Z/i)
+  })
+
+  it('returns a ContentError for the wrong number of choices', () => {
     const errors = validateContentTree(join(FIX, 'bad-choices'))
     expect(errors).toHaveLength(1)
     expect(errors[0]?.file).toContain('question.yaml')
     expect(errors[0]?.message).toMatch(/choices/i)
   })
 
-  it('returns a ContentError for an unknown taxonomy code', () => {
-    const errors = validateContentTree(join(FIX, 'bad-unknown-code'))
-    expect(errors).toHaveLength(1)
-    expect(errors[0]?.message).toMatch(/9Z|unknown/i)
-  })
-
-  it('builds loader options from the real taxonomy seed (4A resolves, validates good tree)', () => {
-    // If the seed-derived options were wrong, the good tree's 4A item would error.
+  it('resolves real seeded topics (the good tree has no topic/tag errors)', () => {
+    // If the topic→discipline map or AAMC vocab were wrong, the good tree would error.
     const errors = validateContentTree(join(FIX, 'good'))
-    expect(errors.some((e) => e.message.includes('4A'))).toBe(false)
+    expect(errors.some((e) => /unknown topic|unknown tag/i.test(e.message))).toBe(false)
   })
 })

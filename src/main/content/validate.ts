@@ -1,35 +1,29 @@
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
-import {
-  buildSectionByCode,
-  contentCategoryCodes,
-  skillCodes
-} from './taxonomy-codes'
-import { scanContent, type ContentError, type LoaderOptions } from './loader'
+import { scanContent, type ContentError } from './loader'
 
-/** Build LoaderOptions from the taxonomy seed and return all content errors for `root`. */
+/** Scan `root` (topic axis) and return every content error. */
 export function validateContentTree(root: string, checkImages = true): ContentError[] {
-  const opts: LoaderOptions = {
-    sectionByCode: buildSectionByCode(),
-    contentCategoryCodes: contentCategoryCodes(),
-    skillCodes: skillCodes(),
-    checkImages
-  }
-  return scanContent(root, opts).errors
+  return scanContent(root, { checkImages }).errors
 }
 
 /** CLI: validate `<root>` (default ./content); print errors; exit 1 on any. */
 function main(argv: string[]): void {
   const root = resolve(argv[2] ?? 'content')
-  const errors = validateContentTree(root)
-  if (errors.length === 0) {
+  const index = scanContent(root)
+  if (index.errors.length === 0) {
+    const topics = index.byTopic.size
+    const questions = index.allQuestionIds.length
+    const passages = index.passagesById.size
     // eslint-disable-next-line no-console
-    console.log(`content:validate — OK (${root})`)
+    console.log(
+      `content:validate — OK (${root}): ${questions} question(s), ${passages} passage(s), ${topics} topic(s)`
+    )
     process.exit(0)
   }
   // eslint-disable-next-line no-console
-  console.error(`content:validate — ${errors.length} error(s) in ${root}:`)
-  for (const e of errors) {
+  console.error(`content:validate — ${index.errors.length} error(s) in ${root}:`)
+  for (const e of index.errors) {
     // eslint-disable-next-line no-console
     console.error(`  ${e.file}: ${e.message}`)
   }
