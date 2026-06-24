@@ -6,6 +6,11 @@ import { writeCollection } from '../../src/main/flashcards/etl'
 import { mintMediaToken, resolveMediaToken, __resetMediaTokens } from '../../src/main/flashcards/media-tokens'
 import { resolveMedia, MIME_BY_EXT } from '../../src/main/flashcards/media-protocol'
 import type { ParsedCollection } from '../../src/main/flashcards/parsed-collection'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { createMediaHandler } from '../../src/main/flashcards/media-protocol'
 
 const minimal: ParsedCollection = {
   noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
@@ -62,5 +67,34 @@ describe('resolveMedia', () => {
   it('the MIME allowlist is closed (no echoing of the filename)', () => {
     expect(MIME_BY_EXT['.svg']).toBe('image/svg+xml')
     expect(MIME_BY_EXT['.exe']).toBeUndefined()
+  })
+})
+
+describe('createMediaHandler', () => {
+  it('streams an authorized file with its allowlisted MIME, 404s everything else', async () => {
+    const dir = join(tmpdir(), `fc-media-${randomUUID()}`)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'cafe01.png'), new Uint8Array([1, 2, 3, 4]))
+
+    const ds = await writeCollection(db, { sourceFilename: 'a.apkg', sourceFormat: 'legacy1', parsed: minimal, media: { 'pic.png': { hash: 'cafe01', ext: '.png' } } })
+    const token = mintMediaToken(ds.id)
+    const handler = createMediaHandler(db, dir)
+
+    const ok = await handler({ url: `freecat-media://${token}/pic.png` } as unknown as Request)
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('Content-Type')).toBe('image/png')
+    expect(new Uint8Array(await ok.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]))
+
+    const bad = await handler({ url: `freecat-media://${token}/missing.png` } as unknown as Request)
+    expect(bad.status).toBe(404)
+
+    const badToken = await handler({ url: 'freecat-media://nope/pic.png' } as unknown as Request)
+    expect(badToken.status).toBe(404)
+  })
+
+  it('never throws on a malformed url', async () => {
+    const handler = createMediaHandler(db, '/media')
+    const res = await handler({ url: 'freecat-media://' } as unknown as Request)
+    expect(res.status).toBe(404)
   })
 })

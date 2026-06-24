@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol } from 'electron'
+import { app, BrowserWindow, dialog, protocol, session } from 'electron'
 import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
@@ -15,10 +15,13 @@ import { contentRoot } from './content/root'
 import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
 import { scanContent } from './content/loader'
 import type { ContentIndex } from './content/types'
+import { createMediaHandler } from './flashcards/media-protocol'
+import { flashcardsMediaDir } from './flashcards/paths'
 
-// The content protocol must be privileged BEFORE app 'ready' (Electron requirement).
+// Privileged schemes must be registered BEFORE app 'ready' (Electron requirement) — one call for all.
 protocol.registerSchemesAsPrivileged([
-  { scheme: CONTENT_PROTOCOL, privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
+  { scheme: CONTENT_PROTOCOL, privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } },
+  { scheme: 'freecat-media', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: false } }
 ])
 
 function createWindow(): void {
@@ -96,6 +99,8 @@ app.whenReady().then(async () => {
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index)
   registerFlashcardsIpc(db)
+
+  protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
 
   createWindow()
   app.on('activate', () => {

@@ -1,5 +1,6 @@
 // src/main/flashcards/media-protocol.ts
 import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { and, eq } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import { media } from '../db/schema'
@@ -39,4 +40,23 @@ export async function resolveMedia(db: DB, mediaDir: string, token: string, file
   const mime = MIME_BY_EXT[ext]
   if (!mime) return null // extension not on the allowlist
   return { path: join(mediaDir, `${row.hash}${ext}`), mime }
+}
+
+/** Build the protocol.handle handler. Reads only `request.url`, so it is unit-testable
+ *  with a plain { url } object. Never throws — any failure becomes a 404. */
+export function createMediaHandler(db: DB, mediaDir: string): (request: Request) => Promise<Response> {
+  return async (request: Request): Promise<Response> => {
+    try {
+      const url = new URL(request.url)
+      const token = url.hostname
+      const filename = decodeURIComponent(url.pathname.replace(/^\//, ''))
+      if (!token || !filename) return new Response(null, { status: 404 })
+      const resolved = await resolveMedia(db, mediaDir, token, filename)
+      if (!resolved) return new Response(null, { status: 404 })
+      const bytes = await readFile(resolved.path)
+      return new Response(bytes, { status: 200, headers: { 'Content-Type': resolved.mime, 'Cache-Control': 'no-store' } })
+    } catch {
+      return new Response(null, { status: 404 })
+    }
+  }
 }
