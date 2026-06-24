@@ -19,3 +19,7 @@ Run `npm run dev`, open the Flashcards tab.
 
 ## Production CSP (optional, if packaging)
 - [ ] In a packaged build, the app document response carries the `APP_CSP` header (`script-src 'self'`), and the card iframe still renders.
+
+## Modern .colpkg acceptance (Plan 3)
+- [ ] Export a deck from a current Anki desktop as a **.colpkg** (and/or a modern .apkg), import it via the Flashcards tab, and confirm: decks/subdecks appear with the right `::` hierarchy; Basic + Cloze render; images load; nothing falls back to `unsupported-format`.
+- [ ] (Optional) Re-export the same AnkiWeb deck (O3, `178384887`) as a modern .colpkg and confirm parity with its legacy .apkg import.
