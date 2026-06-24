@@ -17,8 +17,8 @@ export type RouteKey = keyof typeof ROUTES
 
 /** Optional deep-link target carried across a module switch (cross-links). */
 export interface NavPayload {
-  lessonSlug?: string
-  topicSlug?: string
+  lessonSlug?: string // inbound: Content Review opens this lesson
+  topicSlug?: string // outbound: Qbank opens filtered to this topic (today lessonSlug === topicSlug)
 }
 
 /** Pages may opt into navigation by accepting these props. */

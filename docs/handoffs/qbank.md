@@ -2,6 +2,8 @@
 
 **You are building the Qbank module of FreeCAT in a dedicated session that Warren supervises.**
 
+> **STATUS UPDATE (2026-06-23) — read before following the steps below.** Content Review was built in parallel and **already established the shared backbone this brief assumed Qbank would build**: the MCAT **taxonomy** (`taxonomy_node` + `topic_aamc_category`, **seeded on startup** in `src/main/index.ts`, repo `src/main/repositories/taxonomy.ts`) and the generic **content loader / pipeline v0** (`src/main/content/`). **Qbank must CONSUME these, not recreate them** — do **not** add a second taxonomy migration or a second loader (that would collide; see charter §5.2/§5.5). The taxonomy is **discipline→topic-primary** with an AAMC-code bridge; the cross-link key is the **topic slug**. For lesson↔question cross-links, implement `window.freecat.qbank.questionsForTaxonomy(ref)` (Content Review's reader already calls it defensively and stays disabled until it exists) and consume `window.freecat.contentReview.lessonForTaxonomy(ref)`. Any sections below that say "Qbank builds the pipeline/taxonomy" are superseded by this note and charter §5.1/§5.2/§5.5.
+
 ## How to run this session
 1. Read `docs/freecat-charter.md` (the project source of truth), then this brief.
 2. Use the superpowers flow, with Warren reviewing at each gate:

@@ -29,12 +29,12 @@ export default function LessonReader({ slug, navigate, onBack }: Props): React.J
         }
         setLesson(l)
         setStatus(l.status)
+        void window.freecat.contentReview.markViewed(slug).catch((e) => console.error('markViewed failed', e))
       })
       .catch((e) => {
         console.error('Failed to load lesson', e)
         if (alive) setFailed(true)
       })
-    void window.freecat.contentReview.markViewed(slug).catch((e) => console.error('markViewed failed', e))
     return () => {
       alive = false
     }

@@ -2,6 +2,8 @@
 
 **You are building the Content Review module of FreeCAT in a dedicated session that Warren supervises.**
 
+> **STATUS UPDATE (2026-06-23) — this module is BUILT.** Implemented on branch `content-review-implementation` (spec: `docs/superpowers/specs/2026-06-23-content-review-design.md`; plan: `docs/superpowers/plans/2026-06-23-content-review.md`). It also **established the shared taxonomy** (`taxonomy_node` + `topic_aamc_category`, seeded on startup) and the **generic content loader** (`src/main/content/`) for Qbank to consume. Lessons are discipline→topic, authored as self-contained interactive HTML rendered in a sandboxed iframe; completion calls `recordActivity({ kind: 'lesson.complete' })` once. Remaining: the Qbank side of the cross-links (`questionsForTaxonomy` + the practice deep-link) lands when Qbank ships.
+
 ## How to run this session
 1. Read `docs/freecat-charter.md` (the project source of truth), then this brief.
 2. Use the superpowers flow, with Warren reviewing at each gate:

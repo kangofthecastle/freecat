@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { DB } from '../db/client'
 import { CH } from '../../shared/channels'
 import { ok } from '../../shared/dto'
-import type { LessonDetail, LessonRef, Outline } from '../../shared/dto'
+import type { LessonDetail, LessonRef, Outline, ServiceResult, MarkCompleteResult } from '../../shared/dto'
 import { listDisciplinesWithTopics, getTopicBySlug, topicForTaxonomyRef } from '../repositories/taxonomy'
 import {
   getAllProgress, getProgressForSlug, markViewed, setCompleted, completeLesson, deriveStatus
@@ -41,7 +41,7 @@ export function registerContentReviewIpc(db: DB, store: LessonStore): void {
     await markViewed(db, slugSchema.parse(raw))
   })
 
-  ipcMain.handle(CH.contentMarkComplete, async (_e, raw: unknown) => {
+  ipcMain.handle(CH.contentMarkComplete, async (_e, raw: unknown): Promise<ServiceResult<MarkCompleteResult>> => {
     const p = markCompleteSchema.parse(raw)
     if (p.completed) return completeLesson(db, p.slug)
     await setCompleted(db, p.slug, false)
