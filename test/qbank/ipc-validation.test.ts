@@ -56,6 +56,16 @@ describe('qbank IPC validation', () => {
     ).toEqual({ scopeKind: 'discipline', scopeCode: 'biochem', refine: 'all', count: 5 })
   })
 
+  it('startSession requires scopeCode for discipline/topic scopes but not for mixed', () => {
+    // mixed needs no code: the whole bank.
+    expect(() => startSessionSchema.parse({ scopeKind: 'mixed', refine: 'all', count: 10 })).not.toThrow()
+    // topic/discipline without a code would silently yield an empty session → reject.
+    expect(() => startSessionSchema.parse({ scopeKind: 'topic', refine: 'all', count: 10 })).toThrow()
+    expect(() => startSessionSchema.parse({ scopeKind: 'discipline', refine: 'all', count: 10 })).toThrow()
+    // an empty-string code is treated as absent and rejected.
+    expect(() => startSessionSchema.parse({ scopeKind: 'topic', scopeCode: '', refine: 'all', count: 10 })).toThrow()
+  })
+
   it('startSession rejects the retired scope kinds (skill / content_category / section)', () => {
     expect(() => startSessionSchema.parse({ scopeKind: 'skill', refine: 'all', count: 5 })).toThrow()
     expect(() => startSessionSchema.parse({ scopeKind: 'content_category', scopeCode: '4A', refine: 'all', count: 5 })).toThrow()

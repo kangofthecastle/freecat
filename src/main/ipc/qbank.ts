@@ -9,13 +9,25 @@ import { planSession, gradeAndRecord, summarize } from '../qbank/sessions'
 import { toggleFlag } from '../repositories/qbank-flags'
 import { getDashboard } from '../repositories/qbank-analytics'
 
-export const startSessionSchema = z.object({
-  scopeKind: z.enum(['mixed', 'discipline', 'topic']),
-  scopeCode: z.string().min(1).max(64).optional(),
-  refine: z.enum(['all', 'incorrect', 'flagged']),
-  count: z.number().int().min(1).max(100),
-  tagFilter: z.array(z.object({ vocab: z.string().min(1), code: z.string().min(1) })).optional()
-})
+export const startSessionSchema = z
+  .object({
+    scopeKind: z.enum(['mixed', 'discipline', 'topic']),
+    scopeCode: z.string().min(1).max(64).optional(),
+    refine: z.enum(['all', 'incorrect', 'flagged']),
+    count: z.number().int().min(1).max(100),
+    tagFilter: z.array(z.object({ vocab: z.string().min(1), code: z.string().min(1) })).optional()
+  })
+  // A discipline/topic scope is meaningless without its code: scopeIds would look up `''`
+  // and silently yield an empty session. Only 'mixed' (the whole bank) may omit scopeCode.
+  .superRefine((v, ctx) => {
+    if (v.scopeKind !== 'mixed' && (v.scopeCode === undefined || v.scopeCode.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['scopeCode'],
+        message: `scopeCode is required when scopeKind is "${v.scopeKind}"`
+      })
+    }
+  })
 export const submitAnswerSchema = z.object({
   sessionId: z.number().int().positive(),
   questionId: z.string().min(1).max(128),

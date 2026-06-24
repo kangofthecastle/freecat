@@ -14,8 +14,9 @@ export interface QuestionViewProps {
   answer: AnswerResult | null
   /** Calls qbank.submitAnswer; returns the result (or null on failure) so the view can cache it. */
   onSubmit: (questionId: string, choice: ChoiceLetter) => Promise<SubmitAnswerResult | null>
-  /** Advance to the next unit; rendered once an answer exists. */
-  onNext: () => void
+  /** Advance to the next unit; rendered once an answer exists. On the last unit this
+   *  resolves the completion call, so it may return a promise the view awaits. */
+  onNext: () => void | Promise<void>
   /** Label for the advance button (e.g. 'Next' or 'Finish' on the last unit). */
   nextLabel: string
   /** Renders the post-answer explanation block; Task 23 supplies the real component. */
@@ -48,10 +49,16 @@ export function QuestionView({
 
   // Guard against a rapid double-click on Next/Finish: the last unit's onNext kicks off
   // completeSession, and firing it twice would create a duplicate completion request.
-  const advance = (): void => {
+  // The latch is released once onNext settles so a FAILED completion re-enables Finish
+  // (a successful advance unmounts this view, so the reset is a no-op there).
+  const advance = async (): Promise<void> => {
     if (advancing) return
     setAdvancing(true)
-    onNext()
+    try {
+      await onNext()
+    } finally {
+      setAdvancing(false)
+    }
   }
 
   return (
@@ -85,7 +92,7 @@ export function QuestionView({
           {renderExplanation(question, answer)}
           <button
             type="button"
-            onClick={advance}
+            onClick={() => void advance()}
             disabled={advancing}
             className="rounded-lg bg-gray-800 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-gray-900 disabled:opacity-50"
           >

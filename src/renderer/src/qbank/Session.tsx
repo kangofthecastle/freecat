@@ -82,12 +82,13 @@ export function Session({
     }
   }, [session.sessionId, session.questions, answers, onComplete])
 
-  const next = useCallback((): void => {
+  // Returns finish()'s promise on the last unit so QuestionView's advance latch is held
+  // until completion settles and released (re-enabling Finish) if it fails.
+  const next = useCallback((): void | Promise<void> => {
     if (isLast) {
-      void finish()
-    } else {
-      setIndex((i) => i + 1)
+      return finish()
     }
+    setIndex((i) => i + 1)
   }, [isLast, finish])
 
   const passage = useMemo(
