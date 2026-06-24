@@ -1,0 +1,12 @@
+id: cp-bad-image
+contentCategory: "4A"
+stem: |
+  A question that references an image that does not exist.
+  ![Missing](does-not-exist.png)
+choices:
+  - "a"
+  - "b"
+  - "c"
+  - "d"
+correct: A
+explanation: "The referenced image file is absent, so the image check must fail."

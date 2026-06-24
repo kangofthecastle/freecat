@@ -1,0 +1,9 @@
+id: cp-bad-missing-correct
+contentCategory: "4A"
+stem: "A question with no answer key."
+choices:
+  - "a"
+  - "b"
+  - "c"
+  - "d"
+explanation: "There is no correct letter, so this must fail schema validation."

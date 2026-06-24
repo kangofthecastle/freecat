@@ -1,0 +1,17 @@
+id: cp-0001-kinematics
+contentCategory: "4A"
+topics: [kinematics]
+stem: |
+  A ball is thrown straight up.
+  ![Trajectory](figure-1.png)
+choices:
+  - "It decelerates on the way up"
+  - "It accelerates on the way up"
+  - "Its speed is constant"
+  - "It stops instantly at the top forever"
+correct: A
+explanation: |
+  Gravity opposes the upward motion, so the ball decelerates.
+choiceExplanations:
+  B: "Acceleration is downward, opposing upward velocity."
+  C: "Speed changes under constant gravitational acceleration."

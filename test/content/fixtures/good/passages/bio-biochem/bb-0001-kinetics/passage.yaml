@@ -1,0 +1,25 @@
+id: bb-0001-kinetics
+contentCategory: "1A"
+topics: [enzyme-kinetics]
+passage: |
+  Enzymes lower activation energy. Michaelis-Menten kinetics describe
+  the rate of simple enzyme-catalyzed reactions.
+questions:
+  - id: bb-0001-q1
+    stem: "What does Km represent?"
+    choices:
+      - "Substrate concentration at half Vmax"
+      - "Maximum reaction velocity"
+      - "Enzyme concentration"
+      - "Activation energy"
+    correct: A
+    explanation: "Km is the substrate concentration at which rate is half of Vmax."
+  - id: bb-0001-q2
+    stem: "A competitive inhibitor raises which value?"
+    choices:
+      - "Apparent Km"
+      - "Vmax"
+      - "Enzyme molecular weight"
+      - "Temperature"
+    correct: A
+    explanation: "Competitive inhibition increases apparent Km without changing Vmax."

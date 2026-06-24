@@ -1,0 +1,9 @@
+id: cp-bad-choices
+contentCategory: "4A"
+stem: "A question with only three choices."
+choices:
+  - "a"
+  - "b"
+  - "c"
+correct: A
+explanation: "Three choices must fail the exactly-4 rule."

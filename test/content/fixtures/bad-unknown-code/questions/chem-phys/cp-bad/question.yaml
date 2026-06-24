@@ -1,0 +1,10 @@
+id: cp-bad-unknown-code
+contentCategory: "9Z"
+stem: "A question tagged with a code that does not exist."
+choices:
+  - "a"
+  - "b"
+  - "c"
+  - "d"
+correct: A
+explanation: "9Z is not a known content-category code, so this must fail."
