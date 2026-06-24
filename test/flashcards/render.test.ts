@@ -101,4 +101,19 @@ describe('buildCardHtml', () => {
   it('always includes the height postMessage shim', () => {
     expect(buildCardHtml(view(), 'question')).toContain("type:'fc-height'")
   })
+
+  it('threads a cloze hint through the full {{cloze:}} template path (question shows [hint], answer reveals)', () => {
+    const clozeView = view({
+      renderKind: 'cloze',
+      qfmt: '{{cloze:Text}}',
+      afmt: '{{cloze:Text}}',
+      fields: [{ name: 'Text', value: '{{c1::ans::myhint}}' }],
+      clozeOrdinal: 1
+    })
+    const q = buildCardHtml(clozeView, 'question')
+    expect(q).toContain('[myhint]') // active deletion renders the hint placeholder, not the answer…
+    expect(q).not.toContain('>ans<') // …and does not leak the answer on the question side
+    const a = buildCardHtml(clozeView, 'answer')
+    expect(a).toContain('ans') // answer side reveals the hidden answer
+  })
 })

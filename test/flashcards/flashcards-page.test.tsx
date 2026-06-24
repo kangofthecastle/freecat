@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // test/flashcards/flashcards-page.test.tsx
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, waitFor, fireEvent, act } from '@testing-library/react'
 import type { DeckSetSummary, DeckNode, CardListPage, CardView } from '../../src/shared/dto'
 
 vi.mock('../../src/renderer/src/flashcards/mathjax-asset', () => ({ MATHJAX_SVG_SRC: '' }))
@@ -83,6 +83,36 @@ describe('Flashcards page', () => {
     fireEvent.click(screen.getByText(/^B$/))
     await screen.findByText('BETA-CARD')
     expect(screen.queryByText('ALPHA-CARD')).toBeNull()
+  })
+
+  it('double-clicking "Load more" before the response commits does not append the page twice', async () => {
+    const singleDeck: DeckNode[] = [{ deckId: 10, name: 'A', leafName: 'A', cardCount: 3, children: [] }]
+    // First page resolves immediately (has a nextAfterId so "Load more" renders); the SECOND page
+    // (afterId=1) is gated on a deferred promise so we can fire two clicks before it commits.
+    let releasePage2: (p: CardListPage) => void = () => {}
+    const page2 = new Promise<CardListPage>((res) => { releasePage2 = res })
+    let page2Calls = 0
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => singleDeck,
+      listCards: async ({ afterId }) => {
+        if (afterId === undefined) return { cards: [{ cardId: 1, renderKind: 'basic', preview: 'CARD-1' }], nextAfterId: 1 }
+        page2Calls++
+        return page2 // afterId === 1: stays pending until released
+      }
+    })
+    render(<Flashcards />)
+    fireEvent.click(await screen.findByText(/^A$/))
+    const loadMore = await screen.findByText('Load more')
+    // Fire BOTH clicks inside one act() batch so React does not commit loading=true (→ disabled) between
+    // them — this reproduces the pre-commit double-click race the guard defends against (a separate
+    // fireEvent per click would flush the disabled state in between, hiding the bug). The Set guard on
+    // the in-flight cursor is what dedupes the second same-cursor call.
+    await act(async () => { fireEvent.click(loadMore); fireEvent.click(loadMore) })
+    releasePage2({ cards: [{ cardId: 2, renderKind: 'basic', preview: 'CARD-2' }], nextAfterId: null })
+    await screen.findByText('CARD-2')
+    expect(page2Calls).toBe(1) // the duplicate same-cursor click never reached the backend
+    expect(screen.getAllByText('CARD-2')).toHaveLength(1) // and the page was appended exactly once
   })
 
   it('refreshes the deck list after a successful import', async () => {

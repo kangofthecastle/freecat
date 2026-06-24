@@ -65,30 +65,34 @@ export async function writeCollection(
     })
     for (const chunk of chunkBy(templateValues, INSERT_CHUNK)) await tx.insert(templates).values(chunk)
 
-    // Notes — keep only those whose note type resolved, chunk-insert with .returning(). Map back by
-    // the per-import-unique guid (NOT positional index, since RETURNING order is undefined). The
-    // anki note id → guid and guid → render-kind side maps let cards link by note anki id as before.
+    // Notes — keep only those whose note type resolved, chunk-insert with .returning(). Recover the
+    // new ids POSITIONALLY: within a single multi-row `INSERT ... VALUES (...),(...) RETURNING`, libsql
+    // returns rows in VALUES order, so we zip each chunk's returned rows to that chunk's input rows by
+    // index. We deliberately do NOT key recovery on guid: guid is user-controlled and not UNIQUE here,
+    // so a collection with two notes sharing a guid (corrupt/hand-merged .apkg) would otherwise collapse
+    // both to one db id, silently mis-linking the second note's cards to the first note's row.
     const noteIdByAnki = new Map<number, number>()
     const renderKindByNoteAnki = new Map<number, RenderKind>()
-    const guidByNoteAnki = new Map<number, string>()
-    const rkByGuid = new Map<string, RenderKind>()
     const kept = parsed.notes.flatMap((n) => {
       const noteTypeId = ntIdByAnki.get(n.noteTypeAnkiId)
       const rk = renderKindByNtAnki.get(n.noteTypeAnkiId)
       if (noteTypeId === undefined || rk === undefined) return [] // note → missing note type: skip
-      guidByNoteAnki.set(n.ankiId, n.guid)
-      rkByGuid.set(n.guid, rk)
-      return [{ values: { deckSetId: ds.id, noteTypeId, ankiGuid: n.guid, fieldsJson: n.fields, tags: n.tags, sortField: n.sortField } }]
+      return [{ ankiId: n.ankiId, rk, values: { deckSetId: ds.id, noteTypeId, ankiGuid: n.guid, fieldsJson: n.fields, tags: n.tags, sortField: n.sortField } }]
     })
-    const noteRows: { id: number; ankiGuid: string }[] = []
-    for (const chunk of chunkBy(kept.map((k) => k.values), INSERT_CHUNK)) noteRows.push(...await tx.insert(notes).values(chunk).returning({ id: notes.id, ankiGuid: notes.ankiGuid }))
-    if (noteRows.length !== kept.length) throw new Error('note insert failed')
-    const noteIdByGuid = new Map(noteRows.map((r) => [r.ankiGuid, r.id]))
-    for (const [ankiId, guid] of guidByNoteAnki) {
-      const id = noteIdByGuid.get(guid)
-      const rk = rkByGuid.get(guid)
-      if (id !== undefined && rk !== undefined) { noteIdByAnki.set(ankiId, id); renderKindByNoteAnki.set(ankiId, rk) }
+    let keptIdx = 0
+    for (const chunk of chunkBy(kept, INSERT_CHUNK)) {
+      const rows = await tx.insert(notes).values(chunk.map((k) => k.values)).returning({ id: notes.id })
+      if (rows.length !== chunk.length) throw new Error('note insert failed')
+      for (let i = 0; i < chunk.length; i++) {
+        const k = chunk[i]
+        const row = rows[i]
+        if (k === undefined || row === undefined) throw new Error('note insert failed')
+        noteIdByAnki.set(k.ankiId, row.id)
+        renderKindByNoteAnki.set(k.ankiId, k.rk)
+        keptIdx++
+      }
     }
+    if (keptIdx !== kept.length) throw new Error('note insert failed')
 
     // Cards — one row per ParsedCard; drop dangling cards, then bulk-insert (no returned ids needed).
     const cardValues = parsed.cards.flatMap((c) => {

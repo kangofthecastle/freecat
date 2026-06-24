@@ -63,6 +63,32 @@ describe('flashcards repository', () => {
     expect(page.cards[0]?.preview).toBe('mitochondria is the powerhouse') // not the raw {{c1::…}} markup
   })
 
+  it('listCards preview strips NESTED and multi cloze markup without leaving residue', async () => {
+    const ds = await writeCollection(db, {
+      sourceFilename: 'nested.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Cloze', kind: 'cloze', css: '', fields: [{ ord: 0, name: 'Text' }], templates: [{ ord: 0, name: 'Cloze', qfmt: '{{cloze:Text}}', afmt: '{{cloze:Text}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [
+          { ankiId: 100, guid: 'g1', noteTypeAnkiId: 1, fields: ['{{c1::outer {{c2::inner}}}}'], tags: [], sortField: '{{c1::outer {{c2::inner}}}}' },
+          { ankiId: 101, guid: 'g2', noteTypeAnkiId: 1, fields: ['{{c1::aaa}} and {{c2::bbb}} and {{c1::ccc}}'], tags: [], sortField: '{{c1::aaa}} and {{c2::bbb}} and {{c1::ccc}}' }
+        ],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 101, deckAnkiId: 1, ord: 0 }]
+      }
+    })
+    const deck = (await listDecks(db, ds.id))[0]
+    if (!deck) throw new Error('no deck')
+    const previews = (await listCards(db, { deckId: deck.deckId })).cards.map((c) => c.preview)
+    // nested: clean text, no stray '{{', '}}', or 'c2' residue
+    expect(previews).toContain('outer inner')
+    // multi-cloze on one line: every deletion's answer shown, none left as raw markup
+    expect(previews).toContain('aaa and bbb and ccc')
+    for (const p of previews) {
+      expect(p).not.toContain('{{')
+      expect(p).not.toContain('}}')
+    }
+  })
+
   it('deleteDeckSet removes the set + all children, and 404s the second time', async () => {
     const ds = await writeCollection(db, { sourceFilename: 'a.apkg', sourceFormat: 'legacy1', parsed: make(2) })
     expect(await deleteDeckSet(db, ds.id)).toEqual({ ok: true, data: null })

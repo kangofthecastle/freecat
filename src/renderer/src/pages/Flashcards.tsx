@@ -169,8 +169,15 @@ function CardList({ deckId, selectedCardId, onSelect }: {
   // slow response for a previous deck can't overwrite/append onto the current deck's list (IPC
   // responses are not order-guaranteed).
   const reqIdRef = useRef(0)
+  // Tracks the `after` cursors with a request in flight. reqIdRef only changes on a deck switch, so it
+  // does NOT de-dupe two same-deck "Load more" clicks for the same cursor (a double-click before the
+  // disabled={loading} re-render commits): both would append the identical page → duplicate rows + a
+  // React duplicate-key warning. Guarding on the cursor itself dedupes those concurrent same-page calls.
+  const inFlightAfterRef = useRef(new Set<number | null>())
 
   const loadPage = useCallback(async (after: number | null) => {
+    if (inFlightAfterRef.current.has(after)) return // a request for this same page is already running
+    inFlightAfterRef.current.add(after)
     const reqId = reqIdRef.current
     setLoading(true)
     try {
@@ -179,10 +186,13 @@ function CardList({ deckId, selectedCardId, onSelect }: {
       setCards((prev) => (after === null ? page.cards : [...prev, ...page.cards]))
       setNextAfterId(page.nextAfterId)
     } catch (e) { console.error('listCards failed', e) }
-    finally { if (reqId === reqIdRef.current) setLoading(false) }
+    finally {
+      inFlightAfterRef.current.delete(after)
+      if (reqId === reqIdRef.current) setLoading(false)
+    }
   }, [deckId])
 
-  useEffect(() => { reqIdRef.current += 1; setCards([]); setNextAfterId(null); setLoading(false); void loadPage(null) }, [deckId, loadPage])
+  useEffect(() => { reqIdRef.current += 1; inFlightAfterRef.current.clear(); setCards([]); setNextAfterId(null); setLoading(false); void loadPage(null) }, [deckId, loadPage])
 
   if (cards.length === 0 && !loading) return <p className="p-4 text-sm text-gray-400">No cards in this deck.</p>
 

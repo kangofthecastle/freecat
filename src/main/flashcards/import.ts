@@ -14,7 +14,7 @@ import { extractMembers, ImportTooLargeError, CorruptPackageError } from './zip'
 import { parseLegacyCollection } from './parse-legacy'
 import { parseModernCollection } from './parse-modern'
 import { parseModernMedia } from './modern-media'
-import { zstdDecompressCapped, MAX_ZSTD_COLLECTION } from './zstd'
+import { zstdDecompressCapped, MAX_ZSTD_COLLECTION, MAX_ZSTD_MANIFEST } from './zstd'
 import { storeMedia } from './media-store'
 import { writeCollection } from './etl'
 
@@ -23,6 +23,11 @@ function legacyMedia(members: Record<string, Uint8Array>): Record<string, Uint8A
   const mediaFiles: Record<string, Uint8Array> = {}
   const mediaJson = members['media']
   if (mediaJson) {
+    // Cap the JSON map before decode/parse to mirror the modern manifest bound (modern-media.ts caps
+    // the decompressed manifest at MAX_ZSTD_MANIFEST). 'media' is otherwise only bounded by the 2 GiB
+    // per-member ZIP cap, so a ~2 GiB JSON map would force a multi-GB UTF-8 decode + JSON.parse in main.
+    // The numbered blobs are already bounded by assertWithinCaps; only the map needs this explicit cap.
+    if (mediaJson.length > MAX_ZSTD_MANIFEST) throw new ImportTooLargeError('legacy media map too large')
     try {
       const map = JSON.parse(new TextDecoder().decode(mediaJson)) as Record<string, string>
       for (const [num, name] of Object.entries(map)) {

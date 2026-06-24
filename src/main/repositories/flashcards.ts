@@ -5,6 +5,7 @@ import type { DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardListIt
 import { ok, err } from '../../shared/dto'
 import type { RenderKind } from '../../shared/flashcards/types'
 import { decodeHtmlEntities } from '../../shared/flashcards/render'
+import { renderClozeField } from '../../shared/flashcards/cloze'
 
 export async function listDeckSets(db: DB): Promise<DeckSetSummary[]> {
   const sets = await db.select().from(deckSets)
@@ -45,9 +46,12 @@ export async function listDecks(db: DB, deckSetId: number): Promise<DeckNode[]> 
 
 function preview(sortField: string): string {
   // Reduce cloze syntax to just the answer ({{c1::mitochondria::hint}} → mitochondria) so the browse
-  // list shows readable text for cloze note types (whose sort field is the raw cloze markup).
-  const text = sortField
-    .replace(/\{\{c\d+::(.*?)(::.*?)?\}\}/g, '$1')
+  // list shows readable text for cloze note types (whose sort field is the raw cloze markup). Use the
+  // balanced-brace cloze parser with a sentinel ordinal (0 — no real cloze uses c0) so EVERY deletion
+  // renders inactive (answer only, hint dropped); a naive `{{c…::…}}` regex leaves residue like
+  // `{{c2}}` on nested clozes ({{c1::outer {{c2::inner}}}}). HTML tags from the parser's spans are
+  // stripped below.
+  const text = renderClozeField(sortField, 0, 'answer')
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

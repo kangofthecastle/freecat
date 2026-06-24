@@ -227,6 +227,68 @@ describe('getCard', () => {
     expect(res.data.media).toEqual([{ filename: 'a&b.png', hash: 'ab0', ext: '.png' }])
   })
 
+  it('links each note to its OWN cards even when two notes share a guid (positional id recovery)', async () => {
+    // Corrupt/hand-merged .apkg: two distinct anki note ids share one guid. Recovery must NOT key on
+    // guid (which would collapse both to one db id, mis-linking the second note's card to the first).
+    await writeCollection(db, {
+      sourceFilename: 'dupguid.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [
+          { ankiId: 100, guid: 'dup', noteTypeAnkiId: 1, fields: ['FIRST'], tags: [], sortField: 'FIRST' },
+          { ankiId: 200, guid: 'dup', noteTypeAnkiId: 1, fields: ['SECOND'], tags: [], sortField: 'SECOND' }
+        ],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 200, deckAnkiId: 1, ord: 0 }]
+      }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const page = await listCards(db, { deckId: deck.deckId })
+    expect(page.cards).toHaveLength(2)
+    const fronts: string[] = []
+    for (const c of page.cards) {
+      const res = await getCard(db, c.cardId)
+      if (res.ok) fronts.push(res.data.fields[0]?.value ?? '')
+    }
+    // Each card resolves to its own note's field — NOT both pointing at the first note's row.
+    expect(fronts.sort()).toEqual(['FIRST', 'SECOND'])
+  })
+
+  it('pins the field-count-mismatch contract: missing field → "", extra stored value → dropped', async () => {
+    // A note type whose field count differs from a note's stored fieldsJson (real Anki situation after a
+    // note type adds/removes a field, or a truncated import). getCard maps `fieldDefs.map((f,i) => values[i] ?? "")`.
+    await writeCollection(db, {
+      sourceFilename: 'mismatch.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{
+          ankiId: 1, name: 'ThreeField', kind: 'standard', css: '',
+          fields: [{ ord: 0, name: 'A' }, { ord: 1, name: 'B' }, { ord: 2, name: 'C' }],
+          templates: [{ ord: 0, name: 'C', qfmt: '{{A}}', afmt: '{{A}}' }]
+        }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [
+          // FEWER values than fields: only A and B stored, C must surface as ''.
+          { ankiId: 100, guid: 'g-short', noteTypeAnkiId: 1, fields: ['aV', 'bV'], tags: [], sortField: 'aV' },
+          // MORE values than fields: a 4th trailing value must be dropped.
+          { ankiId: 200, guid: 'g-long', noteTypeAnkiId: 1, fields: ['a2', 'b2', 'c2', 'extra'], tags: [], sortField: 'a2' }
+        ],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 200, deckAnkiId: 1, ord: 0 }]
+      }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const byA = new Map<string, { name: string; value: string }[]>()
+    for (const c of (await listCards(db, { deckId: deck.deckId })).cards) {
+      const res = await getCard(db, c.cardId)
+      if (res.ok) byA.set(res.data.fields[0]?.value ?? '', res.data.fields)
+    }
+    // FEWER: 3 fields defined, 3rd value defaulted to ''.
+    expect(byA.get('aV')).toEqual([{ name: 'A', value: 'aV' }, { name: 'B', value: 'bV' }, { name: 'C', value: '' }])
+    // MORE: only the 3 defined fields are returned; the 4th stored value is dropped.
+    expect(byA.get('a2')).toEqual([{ name: 'A', value: 'a2' }, { name: 'B', value: 'b2' }, { name: 'C', value: 'c2' }])
+  })
+
   it('extracts media referenced via CSS url() and srcset', async () => {
     await writeCollection(db, {
       sourceFilename: 'b.apkg', sourceFormat: 'legacy1',

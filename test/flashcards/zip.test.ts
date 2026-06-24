@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
-import { extractMembers, assertWithinCaps, ImportTooLargeError, MAX_PER_MEMBER, MAX_TOTAL_UNCOMPRESSED } from '../../src/main/flashcards/zip'
-import type { ZipEntryMeta } from '../../src/main/flashcards/central-dir'
+import { extractMembers, assertWithinCaps, ImportTooLargeError, CorruptPackageError, MAX_PER_MEMBER, MAX_TOTAL_UNCOMPRESSED } from '../../src/main/flashcards/zip'
+import { readCentralDirectory, type ZipEntryMeta } from '../../src/main/flashcards/central-dir'
 
 const meta = (name: string, uncompressedSize: number): ZipEntryMeta => ({ name, compressedSize: 1, uncompressedSize, localHeaderOffset: 0 })
 
@@ -24,7 +24,26 @@ describe('zip extraction', () => {
     expect(() => assertWithinCaps([meta('a', MAX_PER_MEMBER), meta('b', MAX_TOTAL_UNCOMPRESSED - MAX_PER_MEMBER)])).not.toThrow()
   })
 
-  it('throws on corrupt zip bytes', () => {
-    expect(() => extractMembers(strToU8('garbage'), () => true)).toThrow()
+  it('throws CorruptPackageError (not ImportTooLargeError) on garbage zip bytes', () => {
+    // Distinguish the two failure modes: import.ts maps CorruptPackageError → 'corrupt-package' and
+    // ImportTooLargeError → 'import-too-large'. Garbage (no central directory) is the corrupt case.
+    expect(() => extractMembers(strToU8('garbage'), () => true)).toThrow(CorruptPackageError)
+  })
+
+  it('throws CorruptPackageError when the central dir is valid but a wanted member payload is corrupt', () => {
+    // Valid central directory (readCentralDirectory succeeds), but the member's deflate payload is
+    // overwritten with garbage so fflate's unzipSync rejects mid-inflate → the unzipSync catch path.
+    const payload = 'A'.repeat(200) // compressible, so there is a deflate stream to corrupt
+    const zip = zipSync({ 'collection.anki2': strToU8(payload) })
+    const [entry] = readCentralDirectory(zip)
+    if (!entry) throw new Error('no entry')
+    expect(entry.localHeaderOffset).toBe(0)
+    // Local file header is 30 bytes + filename; the compressed payload follows it.
+    const payloadStart = 30 + 'collection.anki2'.length
+    const tampered = new Uint8Array(zip)
+    for (let k = 0; k < entry.compressedSize; k++) tampered[payloadStart + k] = 0xff
+    // Sanity: the central directory still parses (we only touched the payload region).
+    expect(readCentralDirectory(tampered).map((e) => e.name)).toEqual(['collection.anki2'])
+    expect(() => extractMembers(tampered, (n) => n === 'collection.anki2')).toThrow(CorruptPackageError)
   })
 })

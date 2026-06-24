@@ -110,6 +110,37 @@ describe('importFromFile (legacy .apkg, end-to-end)', () => {
     expect(await db.select().from(media)).toHaveLength(0) // bad map → import without media
   })
 
+  it('rejects a legacy media JSON map larger than the manifest cap as import-too-large', async () => {
+    // The legacy 'media' map is otherwise bounded only by the 2 GiB per-member ZIP cap; a multi-GB map
+    // would force a huge UTF-8 decode + JSON.parse. The cap mirrors the modern manifest bound (64 MiB).
+    const MAX_ZSTD_MANIFEST = 64 * 1024 * 1024
+    const apkg = await buildLegacyApkg(minimalSpec, { 'pic.png': strToU8('PNG') })
+    const { unzipSync } = await import('fflate')
+    const members = unzipSync(apkg)
+    // A syntactically-irrelevant blob just over the cap (parse is never reached — the size guard fires first).
+    members['media'] = new Uint8Array(MAX_ZSTD_MANIFEST + 1).fill(0x20)
+    const file = join(dir, 'hugemedia.apkg'); writeFileSync(file, zipSync(members))
+    expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'import-too-large' })
+  })
+
+  it('accepts a legacy media JSON map exactly at the manifest cap (strict >, no off-by-one)', async () => {
+    // Boundary: a map of EXACTLY the cap must NOT be rejected by the size guard (it uses strict >).
+    const MAX_ZSTD_MANIFEST = 64 * 1024 * 1024
+    const apkg = await buildLegacyApkg(minimalSpec, { 'pic.png': strToU8('PNG') })
+    const { unzipSync } = await import('fflate')
+    const members = unzipSync(apkg)
+    // Valid JSON map padded with whitespace to land exactly on the cap; JSON.parse ignores the padding.
+    const head = JSON.stringify({ '0': 'pic.png' })
+    const pad = ' '.repeat(MAX_ZSTD_MANIFEST - head.length)
+    members['media'] = strToU8(head + pad)
+    expect(strToU8(head + pad).length).toBe(MAX_ZSTD_MANIFEST)
+    const file = join(dir, 'capmedia.apkg'); writeFileSync(file, zipSync(members))
+    const res = await importFromFile(db, file, join(dir, 'media'))
+    expect(res.ok).toBe(true) // at-cap map is accepted, parsed, and the one blob stored
+    if (!res.ok) throw new Error(res.error)
+    expect((await db.select().from(media)).map((r) => r.filename)).toEqual(['pic.png'])
+  })
+
   it('silently drops a legacy media entry whose numbered blob is absent', async () => {
     // media map names two files but only blob "0" exists; "1" → missing.png must be dropped.
     const apkg = await buildLegacyApkg(minimalSpec, { 'pic.png': strToU8('PNG') })

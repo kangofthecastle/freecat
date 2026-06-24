@@ -60,7 +60,9 @@ describe('importFromFile (modern .colpkg, end-to-end)', () => {
     const pkg = await buildModernApkg(clozeSpec)
     const file = join(dir, 'cloze.colpkg'); writeFileSync(file, pkg)
     const res = await importFromFile(db, file, join(dir, 'media'))
+    expect(res.ok).toBe(true) // a modern .colpkg with no media files imports cleanly
     if (!res.ok) throw new Error(res.error)
+    expect(await db.select().from(media)).toHaveLength(0) // empty media manifest → zero media rows
 
     const setId = (await listDeckSets(db))[0]?.id
     if (setId === undefined) throw new Error('no deck set')
