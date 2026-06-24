@@ -146,4 +146,3 @@ export interface DashboardStats {
   byAamc: AamcAccuracy[] // computed in JS over the content index
   latestIncorrectQuestionIds: string[]
 }
-export interface ComposerData { totalQuestions: number; incorrectCount: number; flaggedCount: number }
