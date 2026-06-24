@@ -1,4 +1,9 @@
 import { createClient } from '@libsql/client'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { readFileSync, rmSync } from 'node:fs'
+import { zipSync, strToU8 } from 'fflate'
 
 export interface LegacyModel { id: number; name: string; type: 0 | 1; css: string; flds: { name: string; ord: number }[]; tmpls: { name: string; ord: number; qfmt: string; afmt: string }[] }
 export interface LegacyDeck { id: number; name: string }
@@ -27,4 +32,17 @@ export async function writeLegacyCollection(path: string, spec: LegacySpec): Pro
   } finally {
     client.close()
   }
+}
+
+/** Build a full legacy .apkg (zip of collection.anki2 + a `media` JSON map + numbered media blobs). */
+export async function buildLegacyApkg(spec: LegacySpec, mediaFiles: Record<string, Uint8Array> = {}): Promise<Uint8Array> {
+  const tmp = join(tmpdir(), `fc-build-${randomUUID()}.anki2`)
+  await writeLegacyCollection(tmp, spec)
+  let collection: Uint8Array
+  try { collection = new Uint8Array(readFileSync(tmp)) } finally { rmSync(tmp, { force: true }) }
+  const entries: Record<string, Uint8Array> = { 'collection.anki2': collection }
+  const mediaMap: Record<string, string> = {}
+  Object.entries(mediaFiles).forEach(([name, bytes], i) => { mediaMap[String(i)] = name; entries[String(i)] = bytes })
+  entries['media'] = strToU8(JSON.stringify(mediaMap))
+  return zipSync(entries)
 }
