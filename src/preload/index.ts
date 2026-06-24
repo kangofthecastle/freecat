@@ -37,6 +37,12 @@ const api: FreecatApi = {
     toggleFlag: (questionId) => ipcRenderer.invoke(CH.qbankToggleFlag, questionId),
     dashboard: () => ipcRenderer.invoke(CH.qbankDashboard),
     questionsForTaxonomy: (topicSlug) => ipcRenderer.invoke(CH.qbankQuestionsForTaxonomy, topicSlug)
-  }
+  },
+  flashcards: {
+    importDeck: () => ipcRenderer.invoke(CH.fcImportDeck),
+    listDeckSets: () => ipcRenderer.invoke(CH.fcListDeckSets),
+    listDecks: (deckSetId) => ipcRenderer.invoke(CH.fcListDecks, deckSetId),
+    listCards: (input) => ipcRenderer.invoke(CH.fcListCards, input),
+    deleteDeckSet: (deckSetId) => ipcRenderer.invoke(CH.fcDeleteDeckSet, deckSetId)
 }
 contextBridge.exposeInMainWorld('freecat', api)

@@ -7,6 +7,7 @@ import { registerGamificationIpc } from './ipc/gamification'
 import { registerContentReviewIpc } from './ipc/content-review'
 import { registerTaxonomyIpc } from './ipc/taxonomy'
 import { registerQbankIpc } from './ipc/qbank'
+import { registerFlashcardsIpc } from './ipc/flashcards'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { createLessonStore } from './content/lessons'
@@ -94,6 +95,7 @@ app.whenReady().then(async () => {
   registerContentReviewIpc(db, lessonStore)
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index)
+  registerFlashcardsIpc(db)
 
   createWindow()
   app.on('activate', () => {
