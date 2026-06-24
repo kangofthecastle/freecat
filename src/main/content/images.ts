@@ -1,4 +1,4 @@
-import { join, normalize, resolve, sep } from 'node:path'
+import { resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const CONTENT_PROTOCOL = 'freecat-content'
@@ -50,14 +50,10 @@ export function registerContentProtocol(root: string): void {
     // freecat-content://<host><pathname> — the path lives in host+pathname; recombine.
     const rawPath = decodeURIComponent(`${url.hostname}${url.pathname}`)
     const resolved = resolve(rootResolved, '.' + (rawPath.startsWith('/') ? rawPath : `/${rawPath}`))
-    // Reject path-escape: resolved must be inside rootResolved.
-    if (resolved !== rootResolved && !resolved.startsWith(rootResolved + sep)) {
+    // Reject path-escape and the root itself: only serve actual files strictly inside root.
+    if (!resolved.startsWith(rootResolved + sep)) {
       return new Response('Forbidden', { status: 403 })
     }
     return net.fetch(pathToFileURL(resolved).toString())
   })
-
-  // `join`/`normalize` are imported for callers that want to pre-normalize paths; reference to avoid unused warnings.
-  void join
-  void normalize
 }

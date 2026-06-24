@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { load } from 'js-yaml'
 import { ZodError } from 'zod'
 import type { ContentIndex, PassageContent, QuestionContent, SectionCode } from './types'
@@ -128,7 +128,7 @@ function loadStandalone(acc: EmptyAccum, root: string, file: string, folderSecti
   const resolved = resolveTag(acc, file, opts, data, folderSection)
   if (!resolved) return
 
-  const itemDir = file.slice(0, file.length - '/question.yaml'.length)
+  const itemDir = dirname(file)
   const itemRel = relative(root, itemDir).split(sep).join('/')
   const checkImages = opts.checkImages !== false
   if (checkImages) {
@@ -166,7 +166,7 @@ function loadPassage(acc: EmptyAccum, root: string, file: string, folderSection:
   const passageTag = resolveTag(acc, file, opts, data, folderSection)
   if (!passageTag) return
 
-  const itemDir = file.slice(0, file.length - '/passage.yaml'.length)
+  const itemDir = dirname(file)
   const itemRel = relative(root, itemDir).split(sep).join('/')
   const checkImages = opts.checkImages !== false
   if (checkImages) {
@@ -187,7 +187,11 @@ function loadPassage(acc: EmptyAccum, root: string, file: string, folderSection:
     return
   }
 
+  // Accumulate sub-questions locally; only merge into the shared accumulator once the
+  // entire passage validates, so a later sub-question error never leaves orphaned byId
+  // entries whose passage was never added to passagesById.
   const questionIds: string[] = []
+  const pending = new Map<string, QuestionContent>()
   for (const q of data.questions) {
     // Resolve the sub-question's effective tag: override if present, else inherit the passage's.
     const overrides = q.contentCategory != null || q.skill != null
@@ -198,13 +202,15 @@ function loadPassage(acc: EmptyAccum, root: string, file: string, folderSection:
     } else {
       subTag = passageTag
     }
-    if (acc.byId.has(q.id)) {
+    if (acc.byId.has(q.id) || pending.has(q.id)) {
       acc.errors.push({ file, message: `duplicate question id "${q.id}"` })
       return
     }
-    acc.byId.set(q.id, normalizeQuestion(q, subTag, data.id, itemRel))
+    pending.set(q.id, normalizeQuestion(q, subTag, data.id, itemRel))
     questionIds.push(q.id)
   }
+  // All sub-questions valid: commit them and the passage together.
+  for (const [id, q] of pending) acc.byId.set(id, q)
   acc.passagesById.set(data.id, {
     id: data.id,
     section: passageTag.section,

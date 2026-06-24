@@ -11,13 +11,13 @@ const choices = z
     z.string().min(1)
   ])
 
-// choiceExplanations: optional, keys restricted to A-D, string values.
+// choiceExplanations: optional, keys restricted to A-D, non-empty string values.
 const choiceExplanations = z
   .object({
-    A: z.string(),
-    B: z.string(),
-    C: z.string(),
-    D: z.string()
+    A: z.string().min(1),
+    B: z.string().min(1),
+    C: z.string().min(1),
+    D: z.string().min(1)
   })
   .partial()
   .strict()
