@@ -1,0 +1,76 @@
+// test/flashcards/render.test.ts
+import { describe, it, expect } from 'vitest'
+import { buildCardHtml, preprocessMath, rewriteMedia, replaceSound, IFRAME_CSP } from '../../src/shared/flashcards/render'
+import type { CardView } from '../../src/shared/dto'
+
+function view(over: Partial<CardView> = {}): CardView {
+  return {
+    cardId: 1, renderKind: 'basic', css: '.card{color:red}',
+    qfmt: '{{Front}}', afmt: '{{FrontSide}}<hr id="ans">{{Back}}',
+    fields: [{ name: 'Front', value: 'Q' }, { name: 'Back', value: 'A' }],
+    tags: [], noteTypeName: 'Basic', deckName: 'D', subdeckName: 'D', templateName: 'C',
+    clozeOrdinal: null, mediaMap: [], ...over
+  }
+}
+
+describe('preprocessMath', () => {
+  it('converts [$]…[/$] → \\(…\\) and [$$]…[/$$] → \\[…\\]', () => {
+    expect(preprocessMath('a [$]x^2[/$] b [$$]y[/$$] c')).toBe('a \\(x^2\\) b \\[y\\] c')
+  })
+})
+
+describe('rewriteMedia', () => {
+  it('rewrites a known src to its url and leaves unknown src alone', () => {
+    const html = '<img src="a.png"><img src="b.png">'
+    const out = rewriteMedia(html, [{ filename: 'a.png', url: 'freecat-media://tok/a.png' }])
+    expect(out).toBe('<img src="freecat-media://tok/a.png"><img src="b.png">')
+  })
+})
+
+describe('replaceSound', () => {
+  it('replaces [sound:x] with an inert chip', () => {
+    expect(replaceSound('[sound:hi.mp3]')).toContain('audio — playback coming in a later milestone')
+    expect(replaceSound('[sound:hi.mp3]')).not.toContain('[sound:')
+  })
+})
+
+describe('buildCardHtml', () => {
+  it('question side embeds the strict CSP, the card CSS, and the question body', () => {
+    const html = buildCardHtml(view(), 'question')
+    expect(html).toContain(`content="${IFRAME_CSP}"`)
+    expect(html).toContain('<style>.card{color:red}</style>')
+    expect(html).toContain('>Q<') // body div wraps the rendered Front
+    expect(html).not.toContain('id="ans"') // answer-only markup absent
+  })
+
+  it('answer side includes the rendered question as FrontSide', () => {
+    const html = buildCardHtml(view(), 'answer')
+    expect(html).toContain('id="ans"')
+    expect(html).toContain('Q') // FrontSide
+    expect(html).toContain('A') // Back
+  })
+
+  it('rewrites media via the mediaMap', () => {
+    const html = buildCardHtml(view({ fields: [{ name: 'Front', value: '<img src="p.png">' }, { name: 'Back', value: '' }], mediaMap: [{ filename: 'p.png', url: 'freecat-media://tok/p.png' }] }), 'question')
+    expect(html).toContain('src="freecat-media://tok/p.png"')
+  })
+
+  it('inlines MathJax only when math is present AND a source is supplied', () => {
+    const mathCard = view({ fields: [{ name: 'Front', value: '[$]x[/$]' }, { name: 'Back', value: '' }] })
+    expect(buildCardHtml(mathCard, 'question', 'MJ_SOURCE')).toContain('MJ_SOURCE')
+    expect(buildCardHtml(mathCard, 'question', 'MJ_SOURCE')).toContain('window.MathJax')
+    expect(buildCardHtml(view(), 'question', 'MJ_SOURCE')).not.toContain('MJ_SOURCE') // no math → no inline
+    expect(buildCardHtml(mathCard, 'question')).not.toContain('window.MathJax') // no source → no inline
+  })
+
+  it('disables $…$ and $$…$$ delimiters in the MathJax config', () => {
+    const mathCard = view({ fields: [{ name: 'Front', value: '[$]x[/$]' }, { name: 'Back', value: '' }] })
+    const html = buildCardHtml(mathCard, 'question', 'MJ')
+    expect(html).toContain("inlineMath:[['\\\\(','\\\\)']]")
+    expect(html).toContain("displayMath:[['\\\\[','\\\\]']]")
+  })
+
+  it('always includes the height postMessage shim', () => {
+    expect(buildCardHtml(view(), 'question')).toContain("type:'fc-height'")
+  })
+})
