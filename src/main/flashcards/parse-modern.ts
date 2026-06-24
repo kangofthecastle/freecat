@@ -2,18 +2,20 @@
 import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard, ParsedField, ParsedTemplate } from './parsed-collection'
 import { NotetypeConfig, TemplateConfig } from './anki-proto'
-import { ImportTooLargeError } from './zip'
+import { ImportTooLargeError, CorruptPackageError } from './zip'
 
 export interface ModernLimits { maxRows: number; maxFieldBytes: number }
 export const DEFAULT_MODERN_LIMITS: ModernLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024 }
 
 const SEP = '\x1f' // 0x1F
 
-/** @libsql returns BLOB columns as ArrayBuffer (or Uint8Array) — normalize for protobuf decode. */
+/** @libsql returns BLOB columns as ArrayBuffer (or Uint8Array) — normalize for protobuf decode.
+ *  Fail loud on any other representation rather than silently decoding an empty blob (which would
+ *  blank css/qfmt and corrupt the import unnoticed). */
 function toBytes(v: unknown): Uint8Array {
   if (v instanceof Uint8Array) return v
   if (v instanceof ArrayBuffer) return new Uint8Array(v)
-  return new Uint8Array(0)
+  throw new CorruptPackageError(`unexpected blob type: ${typeof v}`)
 }
 
 /** Read a schema-18 collection (raw libsql) into the shared ParsedCollection. */

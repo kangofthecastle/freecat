@@ -60,10 +60,15 @@ export async function buildModernApkg(spec: ModernSpec, mediaFiles: Record<strin
   let collection: Uint8Array
   try { collection = new Uint8Array(readFileSync(tmp)) } finally { rmSync(tmp, { force: true }) }
 
-  const members: Record<string, Uint8Array> = { 'collection.anki21b': new Uint8Array(zstdCompressSync(collection)) }
+  // Store members uncompressed (level 0) to mirror real Anki packages, which zip with
+  // CompressionMethod::Stored — the zstd/protobuf payloads are the only compression.
+  const STORED = { level: 0 } as const
+  const members: Record<string, [Uint8Array, typeof STORED]> = {
+    'collection.anki21b': [new Uint8Array(zstdCompressSync(collection)), STORED]
+  }
   const entries: { name: string }[] = []
-  Object.entries(mediaFiles).forEach(([name, bytes], i) => { entries.push({ name }); members[String(i)] = bytes })
+  Object.entries(mediaFiles).forEach(([name, bytes], i) => { entries.push({ name }); members[String(i)] = [bytes, STORED] })
   const manifest = MediaEntries.encode({ entries }).finish()
-  members['media'] = new Uint8Array(zstdCompressSync(manifest))
+  members['media'] = [new Uint8Array(zstdCompressSync(manifest)), STORED]
   return zipSync(members)
 }
