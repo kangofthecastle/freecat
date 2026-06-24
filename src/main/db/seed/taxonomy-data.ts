@@ -3,6 +3,7 @@ import type { DisciplineKey } from '../../../shared/dto'
 export const DISCIPLINES: { slug: DisciplineKey; title: string }[] = [
   { slug: 'gen-chem', title: 'General Chemistry' },
   { slug: 'o-chem', title: 'Organic Chemistry' },
+  { slug: 'physics', title: 'Physics' },
   { slug: 'biology', title: 'Biology' },
   { slug: 'biochem', title: 'Biochemistry' },
   { slug: 'behavioral-sci', title: 'Behavioral Sciences' }
@@ -25,6 +26,11 @@ export const TOPICS: TopicSeed[] = [
   { slug: 'o-chem.intro', discipline: 'o-chem', title: 'Introduction to Organic Chemistry', aamcCodes: ['5D'] },
   { slug: 'o-chem.functional-groups', discipline: 'o-chem', title: 'Functional Groups & Their Reactions', aamcCodes: ['5D'] },
   { slug: 'o-chem.separations-spectroscopy', discipline: 'o-chem', title: 'Separations, Spectroscopy & Analytical Methods', aamcCodes: ['5C', '5D'] },
+  // Physics
+  { slug: 'physics.mechanics', discipline: 'physics', title: 'Mechanics: Motion, Force, Work & Energy', aamcCodes: ['4A'] },
+  { slug: 'physics.fluids', discipline: 'physics', title: 'Fluids & Gases', aamcCodes: ['4B'] },
+  { slug: 'physics.electrostatics-circuits', discipline: 'physics', title: 'Electrostatics & Circuits', aamcCodes: ['4C'] },
+  { slug: 'physics.waves-sound-light', discipline: 'physics', title: 'Waves, Sound & Light', aamcCodes: ['4D'] },
   // Biology
   { slug: 'biology.molecular-biology', discipline: 'biology', title: 'Molecular Biology', aamcCodes: ['1B'] },
   { slug: 'biology.cellular-biology', discipline: 'biology', title: 'Cellular Biology', aamcCodes: ['2A', '2C'] },
