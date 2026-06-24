@@ -49,4 +49,29 @@ describe('importFromFile (modern .colpkg, end-to-end)', () => {
     expect(view.data.deckName).toBe('Default::Sub')
     expect(view.data.media.map((m) => m.filename)).toEqual(['pic.png'])
   })
+
+  it('drives a modern cloze note type end-to-end (protobuf kind=1 → renderKind cloze + ordinal mapping)', async () => {
+    const clozeSpec: ModernSpec = {
+      noteTypes: [{ id: 5, name: 'Cloze', kind: 'cloze', css: '.cloze{}', fields: [{ ord: 0, name: 'Text' }], templates: [{ ord: 0, name: 'Cloze', qfmt: '{{cloze:Text}}', afmt: '{{cloze:Text}}' }] }],
+      decks: [{ id: 1, name: 'Default' }],
+      notes: [{ id: 30, guid: 'gc', mid: 5, flds: ['{{c1::a}} {{c2::b}}'], sfld: 'a b' }],
+      cards: [{ id: 1, nid: 30, did: 1, ord: 0 }, { id: 2, nid: 30, did: 1, ord: 1 }]
+    }
+    const pkg = await buildModernApkg(clozeSpec)
+    const file = join(dir, 'cloze.colpkg'); writeFileSync(file, pkg)
+    const res = await importFromFile(db, file, join(dir, 'media'))
+    if (!res.ok) throw new Error(res.error)
+
+    const setId = (await listDeckSets(db))[0]?.id
+    if (setId === undefined) throw new Error('no deck set')
+    const deck = (await listDecks(db, setId))[0]
+    if (!deck) throw new Error('no deck')
+    const page = await listCards(db, { deckId: deck.deckId })
+    const ordinals: (number | null)[] = []
+    for (const c of page.cards) {
+      const view = await getCard(db, c.cardId)
+      if (view.ok) { ordinals.push(view.data.clozeOrdinal); expect(view.data.renderKind).toBe('cloze') }
+    }
+    expect(ordinals.sort()).toEqual([1, 2]) // templateOrd 0 → ordinal 1, templateOrd 1 → ordinal 2
+  })
 })

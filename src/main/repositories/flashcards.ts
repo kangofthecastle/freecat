@@ -7,13 +7,18 @@ import type { RenderKind } from '../../shared/flashcards/types'
 
 export async function listDeckSets(db: DB): Promise<DeckSetSummary[]> {
   const sets = await db.select().from(deckSets)
-  const out: DeckSetSummary[] = []
-  for (const ds of sets) {
-    const [dc] = await db.select({ n: sql<number>`count(*)` }).from(decks).where(eq(decks.deckSetId, ds.id))
-    const [cc] = await db.select({ n: sql<number>`count(*)` }).from(cards).where(eq(cards.deckSetId, ds.id))
-    out.push({ id: ds.id, sourceFilename: ds.sourceFilename, deckCount: dc?.n ?? 0, cardCount: cc?.n ?? 0, importedAt: ds.importedAt })
-  }
-  return out
+  // Two grouped aggregates instead of 2 counts per set (was 1 + 2N queries).
+  const deckCounts = await db.select({ id: decks.deckSetId, n: sql<number>`count(*)` }).from(decks).groupBy(decks.deckSetId)
+  const cardCounts = await db.select({ id: cards.deckSetId, n: sql<number>`count(*)` }).from(cards).groupBy(cards.deckSetId)
+  const deckCountBySet = new Map(deckCounts.map((r) => [r.id, r.n]))
+  const cardCountBySet = new Map(cardCounts.map((r) => [r.id, r.n]))
+  return sets.map((ds) => ({
+    id: ds.id,
+    sourceFilename: ds.sourceFilename,
+    deckCount: deckCountBySet.get(ds.id) ?? 0,
+    cardCount: cardCountBySet.get(ds.id) ?? 0,
+    importedAt: ds.importedAt
+  }))
 }
 
 export async function listDecks(db: DB, deckSetId: number): Promise<DeckNode[]> {
@@ -97,7 +102,9 @@ export interface CardSource {
 }
 
 // Filenames referenced from card content: <img src="…">, [sound:…], and CSS url(…).
-const MEDIA_REF_RE = /(?:\bsrc\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)\])|(?:url\(\s*["']?([^"')]+)["']?\s*\))/gi
+// `src` is anchored to start-or-whitespace (matching rewriteMedia's `\ssrc`) so attributes like
+// `data-src` are NOT treated as references — otherwise the scan and the rewriter would disagree.
+const MEDIA_REF_RE = /(?:(?:^|\s)src\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)\])|(?:url\(\s*["']?([^"')]+)["']?\s*\))/gi
 // srcset="a.png 1x, b.png 2x" — captured whole, then split into candidate URLs below.
 const SRCSET_REF_RE = /\bsrcset\s*=\s*["']([^"']+)["']/gi
 

@@ -16,7 +16,7 @@ export function CardViewer({ cardId }: { cardId: number }): React.JSX.Element {
   // Load the card whenever the selection changes; reset to the question side.
   useEffect(() => {
     let active = true
-    setView(null); setFailed(false); setSide('question')
+    setView(null); setFailed(false); setSide('question'); setHeight(160) // reset so a tall→short switch doesn't flash the old card's height
     window.freecat.flashcards
       .getCard(cardId)
       .then((res) => { if (active) { if (res.ok) setView(res.data); else setFailed(true) } })

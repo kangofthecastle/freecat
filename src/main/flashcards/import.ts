@@ -87,15 +87,22 @@ export async function importFromFile(db: DB, filePath: string, mediaDir: string)
     if (e instanceof ImportTooLargeError) return err('import-too-large')
     mediaFiles = {} // a bad media manifest should not fail the whole deck
   }
-  const stored = storeMedia(mediaDir, mediaFiles)
-
-  const summary = await writeCollection(db, {
-    sourceFilename: basename(filePath),
-    sourceFormat: detected.format,
-    parsed,
-    media: stored
-  })
-  return ok(summary)
+  // Persist media to disk and write the collection. Both can throw (ENOSPC/EACCES from storeMedia's
+  // sync fs calls; explicit throws / DB failures from writeCollection's transaction). Keep them inside
+  // the envelope so import never rejects to the renderer (design spec: import 'never throws to renderer').
+  try {
+    const stored = storeMedia(mediaDir, mediaFiles)
+    const summary = await writeCollection(db, {
+      sourceFilename: basename(filePath),
+      sourceFormat: detected.format,
+      parsed,
+      media: stored
+    })
+    return ok(summary)
+  } catch (e) {
+    if (e instanceof ImportTooLargeError) return err('import-too-large')
+    return err('corrupt-package')
+  }
 }
 
 /** Electron wrapper: open dialog, then import the chosen file. */

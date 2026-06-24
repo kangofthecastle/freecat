@@ -1,5 +1,5 @@
 // src/renderer/src/pages/Flashcards.tsx
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSetSummary, DeckNode, CardListItem } from '../../../shared/dto'
 import type { PageProps } from '../App'
 import { errorMessage } from '../gamification/labels'
@@ -165,18 +165,24 @@ function CardList({ deckId, selectedCardId, onSelect }: {
   const [cards, setCards] = useState<CardListItem[]>([])
   const [nextAfterId, setNextAfterId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  // Bumped on every deck switch; an in-flight request whose id no longer matches is discarded so a
+  // slow response for a previous deck can't overwrite/append onto the current deck's list (IPC
+  // responses are not order-guaranteed).
+  const reqIdRef = useRef(0)
 
   const loadPage = useCallback(async (after: number | null) => {
+    const reqId = reqIdRef.current
     setLoading(true)
     try {
       const page = await window.freecat.flashcards.listCards({ deckId, afterId: after ?? undefined, limit: 50 })
+      if (reqId !== reqIdRef.current) return // a newer deck selection superseded this request
       setCards((prev) => (after === null ? page.cards : [...prev, ...page.cards]))
       setNextAfterId(page.nextAfterId)
     } catch (e) { console.error('listCards failed', e) }
-    finally { setLoading(false) }
+    finally { if (reqId === reqIdRef.current) setLoading(false) }
   }, [deckId])
 
-  useEffect(() => { setCards([]); setNextAfterId(null); void loadPage(null) }, [deckId, loadPage])
+  useEffect(() => { reqIdRef.current += 1; setCards([]); setNextAfterId(null); setLoading(false); void loadPage(null) }, [deckId, loadPage])
 
   if (cards.length === 0 && !loading) return <p className="p-4 text-sm text-gray-400">No cards in this deck.</p>
 

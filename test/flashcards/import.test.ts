@@ -5,9 +5,41 @@ import { rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
 import { strToU8, zipSync } from 'fflate'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
-import { buildLegacyApkg } from './fixtures/legacy'
+import { buildLegacyApkg, type LegacySpec } from './fixtures/legacy'
 import { importFromFile } from '../../src/main/flashcards/import'
 import { cards, media } from '../../src/main/db/schema'
+
+const MAX_PER_MEMBER = 2 * 1024 * 1024 * 1024 // mirror zip.ts cap
+
+// A minimal valid legacy spec for crafting corrupt/oversized variants around it.
+const minimalSpec: LegacySpec = {
+  models: [{ id: 100, name: 'Basic', type: 0, css: '', flds: [{ name: 'Front', ord: 0 }], tmpls: [{ name: 'C', ord: 0, qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+  decks: [{ id: 1, name: 'Default' }],
+  notes: [{ id: 10, guid: 'g', mid: 100, flds: ['F'] }],
+  cards: [{ id: 1, nid: 10, did: 1, ord: 0 }]
+}
+
+/** Patch a member's central-directory uncompressedSize so assertWithinCaps sees an oversized member
+ *  WITHOUT materializing 2 GiB — the cap check reads central-dir sizes only (no inflation). */
+function forgeOversizedMember(zip: Uint8Array, member: string, size: number): Uint8Array {
+  const buf = new Uint8Array(zip)
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  let eocd = -1
+  for (let i = buf.length - 22; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break } }
+  if (eocd < 0) throw new Error('no eocd')
+  const count = dv.getUint16(eocd + 10, true)
+  let off = dv.getUint32(eocd + 16, true)
+  const dec = new TextDecoder()
+  for (let i = 0; i < count; i++) {
+    const nameLen = dv.getUint16(off + 28, true)
+    const extraLen = dv.getUint16(off + 30, true)
+    const commentLen = dv.getUint16(off + 32, true)
+    const name = dec.decode(buf.subarray(off + 46, off + 46 + nameLen))
+    if (name === member) dv.setUint32(off + 24, size >>> 0, true) // uncompressedSize (low 32 bits)
+    off += 46 + nameLen + extraLen + commentLen
+  }
+  return buf
+}
 
 let db: DB, dir: string
 beforeEach(async () => { db = await createTestDb(); dir = join(tmpdir(), `fc-imp-${randomUUID()}`); mkdirSync(dir, { recursive: true }) })
@@ -39,5 +71,50 @@ describe('importFromFile (legacy .apkg, end-to-end)', () => {
   it('rejects a non-Anki zip as unsupported-format', async () => {
     const file = join(dir, 'x.apkg'); writeFileSync(file, zipSync({ 'random.txt': strToU8('hi') }))
     expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'unsupported-format' })
+  })
+
+  it('maps an Anki zip whose central directory advertises an oversized member to import-too-large', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec)
+    const forged = forgeOversizedMember(apkg, 'collection.anki2', MAX_PER_MEMBER + 1)
+    const file = join(dir, 'big.apkg'); writeFileSync(file, forged)
+    expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'import-too-large' })
+  })
+
+  it('maps an Anki-shaped zip with a garbage collection member to corrupt-package', async () => {
+    // Valid container (detect → legacy1), but collection.anki2 is not a SQLite db → libsql open/parse fails.
+    const file = join(dir, 'bad.apkg'); writeFileSync(file, zipSync({ 'collection.anki2': strToU8('NOT A SQLITE DB'), 'media': strToU8('{}') }))
+    expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'corrupt-package' })
+  })
+
+  it('maps truncated/garbage bytes (no zip central directory) to corrupt-package', async () => {
+    const file = join(dir, 'garbage.apkg'); writeFileSync(file, strToU8('not a zip at all'))
+    expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'corrupt-package' })
+  })
+
+  it('imports without media when the legacy media map is malformed JSON (does not fail the deck)', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec, { 'pic.png': strToU8('PNG') })
+    const { unzipSync } = await import('fflate')
+    const members = unzipSync(apkg)
+    members['media'] = strToU8('{not valid json') // replace the valid map with garbage
+    const file = join(dir, 'badmedia.apkg'); writeFileSync(file, zipSync(members))
+    const res = await importFromFile(db, file, join(dir, 'media'))
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error(res.error)
+    expect(res.data.cardCount).toBe(1)
+    expect(await db.select().from(media)).toHaveLength(0) // bad map → import without media
+  })
+
+  it('silently drops a legacy media entry whose numbered blob is absent', async () => {
+    // media map names two files but only blob "0" exists; "1" → missing.png must be dropped.
+    const apkg = await buildLegacyApkg(minimalSpec, { 'pic.png': strToU8('PNG') })
+    const { unzipSync } = await import('fflate')
+    const members = unzipSync(apkg)
+    members['media'] = strToU8(JSON.stringify({ '0': 'pic.png', '1': 'missing.png' }))
+    const file = join(dir, 'gapmedia.apkg'); writeFileSync(file, zipSync(members))
+    const res = await importFromFile(db, file, join(dir, 'media'))
+    expect(res.ok).toBe(true)
+    if (!res.ok) throw new Error(res.error)
+    const rows = await db.select().from(media)
+    expect(rows.map((r) => r.filename)).toEqual(['pic.png']) // missing.png dropped
   })
 })

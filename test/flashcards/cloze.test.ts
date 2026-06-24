@@ -13,6 +13,12 @@ describe('renderClozeField', () => {
     expect(out).toBe('<span class="cloze" data-cloze="answer" data-ordinal="1">[my hint]</span>')
   })
 
+  it('splits answer/hint on the FIRST top-level :: — extra :: stay in the hint', () => {
+    // {{c1::answer::a::b}} → answer="answer", hint="a::b" → placeholder [a::b].
+    const out = renderClozeField('{{c1::answer::a::b}}', 1, 'question')
+    expect(out).toBe('<span class="cloze" data-cloze="answer" data-ordinal="1">[a::b]</span>')
+  })
+
   it('answer side: active deletion reveals the answer', () => {
     const out = renderClozeField('the {{c1::answer}} here', 1, 'answer')
     expect(out).toBe('the <span class="cloze" data-ordinal="1">answer</span> here')

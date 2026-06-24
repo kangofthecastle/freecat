@@ -101,6 +101,57 @@ describe('getCard', () => {
     expect(res.data.media).toEqual([])
   })
 
+  it('selects the per-card template by ord for a multi-template (Basic-and-reversed) note type', async () => {
+    // One note type, two templates: ord 0 Front→Back, ord 1 Back→Front. One note, two cards.
+    await writeCollection(db, {
+      sourceFilename: 'r.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{
+          ankiId: 1, name: 'Basic (and reversed)', kind: 'standard', css: '',
+          fields: [{ ord: 0, name: 'Front' }, { ord: 1, name: 'Back' }],
+          templates: [
+            { ord: 0, name: 'Forward', qfmt: '{{Front}}', afmt: '{{Back}}' },
+            { ord: 1, name: 'Reverse', qfmt: '{{Back}}', afmt: '{{Front}}' }
+          ]
+        }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: ['theFront', 'theBack'], tags: [], sortField: 'theFront' }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 100, deckAnkiId: 1, ord: 1 }]
+      }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const page = await listCards(db, { deckId: deck.deckId })
+    const byTemplate = new Map<string, { qfmt: string; afmt: string }>()
+    for (const c of page.cards) {
+      const res = await getCard(db, c.cardId)
+      if (res.ok) byTemplate.set(res.data.templateName, { qfmt: res.data.qfmt, afmt: res.data.afmt })
+    }
+    // The ord-1 card must resolve to the Reverse template (Back→Front), NOT tmpls[0].
+    expect(byTemplate.get('Forward')).toEqual({ qfmt: '{{Front}}', afmt: '{{Back}}' })
+    expect(byTemplate.get('Reverse')).toEqual({ qfmt: '{{Back}}', afmt: '{{Front}}' })
+  })
+
+  it('does not attach media for a data-src reference (aligned with rewriteMedia, which leaves data-src alone)', async () => {
+    await writeCollection(db, {
+      sourceFilename: 'ds.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: ['<img data-src="x.png">'], tags: [], sortField: 'x' }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }]
+      },
+      media: { 'x.png': { hash: 'x0', ext: '.png' } }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const c = (await listCards(db, { deckId: deck.deckId })).cards[0]
+    if (!c) throw new Error('no card')
+    const res = await getCard(db, c.cardId)
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.data.media).toEqual([]) // data-src is not a real src ref → not authorized
+  })
+
   it('extracts media referenced via CSS url() and srcset', async () => {
     await writeCollection(db, {
       sourceFilename: 'b.apkg', sourceFormat: 'legacy1',

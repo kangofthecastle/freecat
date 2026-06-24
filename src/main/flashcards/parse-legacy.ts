@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard } from './parsed-collection'
+import { assertCollectionWithinLimits, DEFAULT_LIMITS, type CollectionLimits } from './parse-modern'
 
 interface RawModel { id: number | string; name: string; type: number; css?: string; flds: { name: string; ord: number }[]; tmpls: { name: string; ord: number; qfmt: string; afmt: string }[] }
 interface RawDeck { id: number | string; name: string }
@@ -7,9 +8,14 @@ interface RawDeck { id: number | string; name: string }
 const SEP = ''
 
 /** Read a legacy collection.anki2 (raw libsql, NOT drizzle) into a ParsedCollection. */
-export async function parseLegacyCollection(collectionPath: string): Promise<ParsedCollection> {
+export async function parseLegacyCollection(collectionPath: string, limits: CollectionLimits = DEFAULT_LIMITS): Promise<ParsedCollection> {
   const client = createClient({ url: `file:${collectionPath}` })
   try {
+    // Same amplification guards the modern parser runs (design spec): a legacy collection.anki2 is
+    // raw SQLite bounded only by the 2 GiB per-member ZIP cap, so reject row/field bombs before
+    // materializing every notes/cards row (models/decks come from the JSON col blob below).
+    await assertCollectionWithinLimits(client, limits, ['notes', 'cards'])
+
     const colRes = await client.execute('SELECT models, decks FROM col LIMIT 1')
     const col = colRes.rows[0]
     if (!col) throw new Error('empty col table')

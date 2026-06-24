@@ -1,11 +1,34 @@
 // src/main/flashcards/parse-modern.ts
+import type { Client } from '@libsql/client'
 import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard, ParsedField, ParsedTemplate } from './parsed-collection'
 import { NotetypeConfig, TemplateConfig } from './anki-proto'
 import { ImportTooLargeError, CorruptPackageError } from './zip'
 
-export interface ModernLimits { maxRows: number; maxFieldBytes: number }
-export const DEFAULT_MODERN_LIMITS: ModernLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024 }
+export interface CollectionLimits { maxRows: number; maxFieldBytes: number }
+/** Retained name (the modern parser's original export); now an alias of the shared {@link CollectionLimits}. */
+export type ModernLimits = CollectionLimits
+export const DEFAULT_LIMITS: CollectionLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024 }
+export const DEFAULT_MODERN_LIMITS = DEFAULT_LIMITS
+
+/**
+ * Cheap pre-ETL amplification guards shared by both the legacy and modern parsers (design spec).
+ * Rejects collections that declare more rows than `maxRows` in any materialized table, or a single
+ * `notes.flds` larger than `maxFieldBytes`, before any row is pulled into JS. Pass only the tables
+ * a given parser materializes (each must exist in that schema).
+ */
+export async function assertCollectionWithinLimits(
+  client: Client,
+  limits: CollectionLimits,
+  tables: readonly string[]
+): Promise<void> {
+  for (const table of tables) {
+    const n = Number((await client.execute(`SELECT COUNT(*) AS n FROM ${table}`)).rows[0]?.n ?? 0)
+    if (n > limits.maxRows) throw new ImportTooLargeError(`too many rows in ${table}`)
+  }
+  const maxFld = Number((await client.execute('SELECT COALESCE(MAX(LENGTH(flds)), 0) AS n FROM notes')).rows[0]?.n ?? 0)
+  if (maxFld > limits.maxFieldBytes) throw new ImportTooLargeError('field too large')
+}
 
 const SEP = '\x1f' // 0x1F
 
@@ -19,15 +42,13 @@ function toBytes(v: unknown): Uint8Array {
 }
 
 /** Read a schema-18 collection (raw libsql) into the shared ParsedCollection. */
-export async function parseModernCollection(path: string, limits: ModernLimits = DEFAULT_MODERN_LIMITS): Promise<ParsedCollection> {
+export async function parseModernCollection(path: string, limits: CollectionLimits = DEFAULT_LIMITS): Promise<ParsedCollection> {
   const client = createClient({ url: `file:${path}` })
   try {
-    // Amplification guards before building DTOs.
-    const noteCount = Number((await client.execute('SELECT COUNT(*) AS n FROM notes')).rows[0]?.n ?? 0)
-    const cardCount = Number((await client.execute('SELECT COUNT(*) AS n FROM cards')).rows[0]?.n ?? 0)
-    if (noteCount > limits.maxRows || cardCount > limits.maxRows) throw new ImportTooLargeError('too many rows')
-    const maxFld = Number((await client.execute('SELECT COALESCE(MAX(LENGTH(flds)), 0) AS n FROM notes')).rows[0]?.n ?? 0)
-    if (maxFld > limits.maxFieldBytes) throw new ImportTooLargeError('field too large')
+    // Amplification guards before building DTOs — cover every table we fully materialize below,
+    // so a pathological collection with millions of note-type/field/template/deck rows cannot
+    // amplify within the 2 GiB decompression bound.
+    await assertCollectionWithinLimits(client, limits, ['notes', 'cards', 'notetypes', 'fields', 'templates', 'decks'])
 
     const fieldsByNt = new Map<number, ParsedField[]>()
     for (const r of (await client.execute('SELECT ntid, ord, name FROM fields ORDER BY ntid, ord')).rows) {

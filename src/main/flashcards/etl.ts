@@ -6,6 +6,14 @@ import type { SourceFormat, RenderKind } from '../../shared/flashcards/types'
 import type { DeckSetSummary } from '../../shared/dto'
 import { classifyNoteType } from './classify'
 
+// Multi-row insert chunk. Widest row is 6 columns → 500 rows = 3000 bound variables, well under
+// modern SQLite's 32766 limit; turns a 35k-card deck's ~70k statements into ~150.
+const INSERT_CHUNK = 500
+
+function* chunkBy<T>(items: readonly T[], size: number): Generator<T[]> {
+  for (let i = 0; i < items.length; i += size) yield items.slice(i, i + size)
+}
+
 export async function writeCollection(
   db: DB,
   input: { sourceFilename: string; sourceFormat: SourceFormat; parsed: ParsedCollection; media?: Record<string, { hash: string; ext: string }> }
@@ -31,47 +39,64 @@ export async function writeCollection(
       if (selfId && parentId) await tx.update(decks).set({ parentDeckId: parentId }).where(eq(decks.id, selfId))
     }
 
-    // Note types (classified) + their fields + templates.
+    // Note types (classified) — chunked insert with .returning() to map anki id → db id by index;
+    // their fields + templates are collected and bulk-inserted after.
     const ntIdByAnki = new Map<number, number>()
     const renderKindByNtAnki = new Map<number, RenderKind>()
-    for (const nt of parsed.noteTypes) {
+    const ntValues = parsed.noteTypes.map((nt) => {
       const renderKind = classifyNoteType(nt)
-      const [row] = await tx.insert(noteTypes).values({ deckSetId: ds.id, ankiNotetypeId: nt.ankiId, name: nt.name, kind: nt.kind, css: nt.css, renderKind }).returning()
-      if (!row) throw new Error('note type insert failed')
-      ntIdByAnki.set(nt.ankiId, row.id)
       renderKindByNtAnki.set(nt.ankiId, renderKind)
-      for (const f of nt.fields) await tx.insert(noteTypeFields).values({ noteTypeId: row.id, ord: f.ord, name: f.name })
-      for (const t of nt.templates) await tx.insert(templates).values({ noteTypeId: row.id, ord: t.ord, name: t.name, qfmt: t.qfmt, afmt: t.afmt })
-    }
+      return { deckSetId: ds.id, ankiNotetypeId: nt.ankiId, name: nt.name, kind: nt.kind, css: nt.css, renderKind }
+    })
+    const ntRows: { id: number }[] = []
+    for (const chunk of chunkBy(ntValues, INSERT_CHUNK)) ntRows.push(...await tx.insert(noteTypes).values(chunk).returning({ id: noteTypes.id }))
+    if (ntRows.length !== parsed.noteTypes.length) throw new Error('note type insert failed')
+    parsed.noteTypes.forEach((nt, i) => { const row = ntRows[i]; if (row) ntIdByAnki.set(nt.ankiId, row.id) })
 
-    // Notes.
+    const fieldValues = parsed.noteTypes.flatMap((nt) => {
+      const ntId = ntIdByAnki.get(nt.ankiId)
+      return ntId === undefined ? [] : nt.fields.map((f) => ({ noteTypeId: ntId, ord: f.ord, name: f.name }))
+    })
+    for (const chunk of chunkBy(fieldValues, INSERT_CHUNK)) await tx.insert(noteTypeFields).values(chunk)
+    const templateValues = parsed.noteTypes.flatMap((nt) => {
+      const ntId = ntIdByAnki.get(nt.ankiId)
+      return ntId === undefined ? [] : nt.templates.map((t) => ({ noteTypeId: ntId, ord: t.ord, name: t.name, qfmt: t.qfmt, afmt: t.afmt }))
+    })
+    for (const chunk of chunkBy(templateValues, INSERT_CHUNK)) await tx.insert(templates).values(chunk)
+
+    // Notes — keep only those whose note type resolved, chunk-insert with .returning(), zip ids back.
     const noteIdByAnki = new Map<number, number>()
     const renderKindByNoteAnki = new Map<number, RenderKind>()
-    for (const n of parsed.notes) {
+    const kept = parsed.notes.flatMap((n) => {
       const noteTypeId = ntIdByAnki.get(n.noteTypeAnkiId)
       const rk = renderKindByNtAnki.get(n.noteTypeAnkiId)
-      if (noteTypeId === undefined || rk === undefined) continue // note → missing note type: skip
-      const [row] = await tx.insert(notes).values({ deckSetId: ds.id, noteTypeId, ankiGuid: n.guid, fieldsJson: n.fields, tags: n.tags, sortField: n.sortField }).returning()
-      if (!row) throw new Error('note insert failed')
-      noteIdByAnki.set(n.ankiId, row.id)
-      renderKindByNoteAnki.set(n.ankiId, rk)
-    }
+      if (noteTypeId === undefined || rk === undefined) return [] // note → missing note type: skip
+      return [{ note: n, rk, values: { deckSetId: ds.id, noteTypeId, ankiGuid: n.guid, fieldsJson: n.fields, tags: n.tags, sortField: n.sortField } }]
+    })
+    const noteRows: { id: number }[] = []
+    for (const chunk of chunkBy(kept.map((k) => k.values), INSERT_CHUNK)) noteRows.push(...await tx.insert(notes).values(chunk).returning({ id: notes.id }))
+    if (noteRows.length !== kept.length) throw new Error('note insert failed')
+    kept.forEach((k, i) => {
+      const row = noteRows[i]
+      if (!row) return
+      noteIdByAnki.set(k.note.ankiId, row.id)
+      renderKindByNoteAnki.set(k.note.ankiId, k.rk)
+    })
 
-    // Cards — one row per ParsedCard.
-    let cardCount = 0
-    for (const c of parsed.cards) {
+    // Cards — one row per ParsedCard; drop dangling cards, then bulk-insert (no returned ids needed).
+    const cardValues = parsed.cards.flatMap((c) => {
       const noteId = noteIdByAnki.get(c.noteAnkiId)
       const deckId = deckIdByAnki.get(c.deckAnkiId)
       const renderKind = renderKindByNoteAnki.get(c.noteAnkiId)
-      if (noteId === undefined || deckId === undefined || renderKind === undefined) continue // dangling card: skip
-      await tx.insert(cards).values({ deckSetId: ds.id, noteId, deckId, templateOrd: c.ord, renderKind })
-      cardCount++
-    }
+      if (noteId === undefined || deckId === undefined || renderKind === undefined) return [] // dangling card: skip
+      return [{ deckSetId: ds.id, noteId, deckId, templateOrd: c.ord, renderKind }]
+    })
+    for (const chunk of chunkBy(cardValues, INSERT_CHUNK)) await tx.insert(cards).values(chunk)
+    const cardCount = cardValues.length
 
     // Media filename → hash map (bytes already written to disk by the orchestrator's storeMedia).
-    for (const [filename, m] of Object.entries(input.media ?? {})) {
-      await tx.insert(media).values({ deckSetId: ds.id, filename, hash: m.hash, ext: m.ext })
-    }
+    const mediaValues = Object.entries(input.media ?? {}).map(([filename, m]) => ({ deckSetId: ds.id, filename, hash: m.hash, ext: m.ext }))
+    for (const chunk of chunkBy(mediaValues, INSERT_CHUNK)) await tx.insert(media).values(chunk)
 
     return { id: ds.id, sourceFilename, deckCount: parsed.decks.length, cardCount, importedAt: ds.importedAt }
   })
