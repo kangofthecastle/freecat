@@ -18,6 +18,13 @@ const api: FreecatApi = {
     equipItem: (petId, itemKey) => ipcRenderer.invoke(CH.gamEquipItem, { petId, itemKey }),
     unequipItem: (petId, itemKey) => ipcRenderer.invoke(CH.gamUnequipItem, { petId, itemKey }),
     renamePet: (petId, name) => ipcRenderer.invoke(CH.gamRenamePet, { petId, name })
+  },
+  contentReview: {
+    getOutline: () => ipcRenderer.invoke(CH.contentGetOutline),
+    getLesson: (slug) => ipcRenderer.invoke(CH.contentGetLesson, slug),
+    markViewed: (slug) => ipcRenderer.invoke(CH.contentMarkViewed, slug),
+    markComplete: (slug, completed) => ipcRenderer.invoke(CH.contentMarkComplete, { slug, completed }),
+    lessonForTaxonomy: (ref) => ipcRenderer.invoke(CH.contentLessonForTaxonomy, ref)
   }
 }
 contextBridge.exposeInMainWorld('freecat', api)
