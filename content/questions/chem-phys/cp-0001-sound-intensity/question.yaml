@@ -1,0 +1,36 @@
+id: cp-0001-sound-intensity
+contentCategory: "4D"
+topics: [sound-intensity, decibels, logarithms]
+stem: |
+  Sound intensity level $\beta$ (in decibels) relates to intensity $I$ by
+  $\beta = 10 \log_{10}\!\left(\dfrac{I}{I_0}\right)$, where
+  $I_0 = 1.0 \times 10^{-12}\ \mathrm{W/m^2}$ is the reference intensity.
+
+  A point source radiates sound uniformly in all directions in a non-absorbing
+  medium. A microphone is moved from a distance $r$ to a distance $2r$ from the
+  source, as shown.
+
+  ![Diagram: a point source with a microphone at distance r and at distance 2r.](figure-1.svg)
+
+  By how much does the **sound intensity level** measured at the microphone change
+  when it is moved from $r$ to $2r$?
+choices:
+  - "It decreases by about 6 dB."
+  - "It decreases by about 3 dB."
+  - "It decreases by about 12 dB."
+  - "It is unchanged, because the source power is unchanged."
+correct: A
+explanation: |
+  For a point source radiating uniformly, intensity obeys the inverse-square law:
+  $I \propto 1/r^2$. Doubling the distance multiplies intensity by
+  $\left(\tfrac{1}{2}\right)^2 = \tfrac{1}{4}$.
+
+  The change in intensity level is
+  $\Delta\beta = 10 \log_{10}\!\left(\dfrac{I_2}{I_1}\right)
+  = 10 \log_{10}\!\left(\tfrac{1}{4}\right) \approx -6.0\ \mathrm{dB}$.
+
+  So the level **drops by about 6 dB**, making choice A correct.
+choiceExplanations:
+  B: "A 3 dB drop corresponds to halving the intensity (a factor of 1/2), which would occur for a factor-of-$\\sqrt{2}$ change in distance, not a doubling."
+  C: "A 12 dB drop corresponds to a factor-of-1/16 change in intensity (distance ×4), not ×2."
+  D: "Although the source *power* is constant, that fixed power spreads over a sphere whose area grows as $r^2$, so the *intensity* at the microphone falls."

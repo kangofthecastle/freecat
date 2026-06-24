@@ -1,0 +1,84 @@
+id: bb-0001-competitive-inhibition
+contentCategory: "1A"
+topics: [enzyme-kinetics, michaelis-menten, competitive-inhibition]
+passage: |
+  A research team studies a bacterial dehydrogenase, **EnzD**, that converts a
+  small substrate **S** into product **P**. Working at a fixed, saturating enzyme
+  concentration, they measure the initial reaction velocity $v_0$ across a range
+  of substrate concentrations $[\mathrm{S}]$ and fit each data set to the
+  Michaelis–Menten equation
+
+  $$v_0 = \frac{V_{\max}\,[\mathrm{S}]}{K_m + [\mathrm{S}]}.$$
+
+  They repeat the experiment in the presence of a candidate drug, **molecule X**,
+  whose structure closely resembles that of S. The fitted parameters are:
+
+  | Condition            | $V_{\max}$ (µmol/min) | $K_m$ (mM) |
+  | -------------------- | --------------------- | ---------- |
+  | EnzD alone           | 100                   | 2.0        |
+  | EnzD + molecule X    | 100                   | 8.0        |
+
+  In a separate assay the team confirms that molecule X binds EnzD reversibly and
+  that raising $[\mathrm{S}]$ to very high levels fully restores the original
+  reaction rate.
+questions:
+  - id: bb-0001-q1
+    stem: |
+      Based on the fitted parameters and the high-substrate result, molecule X most
+      likely inhibits EnzD by which mechanism?
+    choices:
+      - "Competitive inhibition"
+      - "Pure noncompetitive inhibition"
+      - "Uncompetitive inhibition"
+      - "Irreversible covalent inhibition"
+    correct: A
+    explanation: |
+      Molecule X leaves $V_{\max}$ unchanged (100 µmol/min) but **raises the apparent
+      $K_m$** (2.0 → 8.0 mM), and excess substrate fully overcomes it. That is the
+      signature of **competitive inhibition**: the inhibitor competes with substrate
+      for the active site, so enough S outcompetes it and the same $V_{\max}$ is
+      reached, just at higher $[\mathrm{S}]$. Its structural resemblance to S supports
+      active-site competition.
+    choiceExplanations:
+      B: "Pure noncompetitive inhibition lowers $V_{\\max}$ while leaving $K_m$ unchanged — the opposite of what is observed."
+      C: "Uncompetitive inhibition lowers **both** $V_{\\max}$ and $K_m$; here $V_{\\max}$ is unchanged."
+      D: "The inhibition is reversible (high $[\\mathrm{S}]$ restores full activity), so it cannot be irreversible covalent inhibition."
+  - id: bb-0001-q2
+    stem: |
+      In the presence of molecule X, what substrate concentration is required to reach
+      **half** of $V_{\max}$?
+    choices:
+      - "8.0 mM"
+      - "2.0 mM"
+      - "4.0 mM"
+      - "It can never reach half of $V_{\\max}$ while X is present."
+    correct: A
+    explanation: |
+      By definition, $v_0 = \tfrac{1}{2}V_{\max}$ exactly when $[\mathrm{S}] = K_m$.
+      With molecule X present the apparent $K_m$ is **8.0 mM**, so half-maximal velocity
+      occurs at $[\mathrm{S}] = 8.0\ \mathrm{mM}$.
+    choiceExplanations:
+      B: "2.0 mM is the $K_m$ of EnzD **alone**; the question asks about the inhibited condition."
+      C: "4.0 mM is neither the inhibited $K_m$ nor a value the equation yields for half-$V_{\\max}$."
+      D: "$V_{\\max}$ is unchanged by a competitive inhibitor, so half-$V_{\\max}$ is reachable — it just needs more substrate."
+  - id: bb-0001-q3
+    stem: |
+      Molecule X resembles S closely enough to occupy EnzD's active site. Which property
+      of the active site best explains why this **shape complementarity** lets X compete
+      with S?
+    choices:
+      - "The active site is a specific three-dimensional pocket whose shape and chemistry select for molecules that fit it."
+      - "The active site denatures any small molecule that enters it."
+      - "The active site binds substrates only through peptide bonds it forms with them."
+      - "The active site changes the equilibrium constant of the reaction it catalyzes."
+    correct: A
+    explanation: |
+      Enzyme specificity arises because the **active site is a defined 3-D pocket** lined
+      by particular amino-acid side chains; binding depends on complementary shape and
+      chemistry (hydrogen bonds, charge, hydrophobic contacts). A molecule that mimics S's
+      shape can therefore occupy that pocket and block S — the basis of competitive
+      inhibition.
+    choiceExplanations:
+      B: "Active sites bind and orient substrates; they do not routinely denature the small molecules that enter them."
+      C: "Substrate binding is **noncovalent** (reversible contacts), not via peptide bonds; peptide bonds link amino acids within the protein backbone."
+      D: "A catalyst speeds the approach to equilibrium but does **not** change the equilibrium constant $K_{eq}$."

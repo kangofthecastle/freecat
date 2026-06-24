@@ -1,0 +1,71 @@
+id: cars-0001-on-maps
+skill: cars-foundations
+topics: [philosophy-of-representation, abstraction]
+passage: |
+  Every map is a confession of priorities. To draw one is to decide, before a single
+  line is set down, what may be left out. A road atlas erases the forest so that the
+  traveler can find the road; a geologist's chart erases the road so that the rock
+  beneath it can be seen. We are tempted to call the more detailed map the more honest
+  one, but detail is not the same as truth. A map that reproduced every feature of the
+  territory at full scale would be the territory again, and so would tell us nothing —
+  for the whole purpose of a map is to be smaller, and emptier, than the world it
+  describes.
+
+  What we ask of a map, then, is not completeness but *useful omission*. Its blank
+  spaces are not failures; they are the map's argument about what matters for a
+  particular journey. This is why the same coastline can be rendered a dozen ways
+  without any of them being wrong. The cartographer is less a copyist than an editor,
+  and like every editor she is answerable not to the question "Is anything missing?"
+  but to the question "Is anything missing that the reader needed?"
+
+  The danger comes when we forget that a map was made for a purpose and begin to treat
+  it as the world entire. A budget is a map of an institution's intentions; a diagnosis
+  is a map of a body's distress; a curriculum is a map of a discipline. Each is
+  indispensable, and each becomes a quiet tyranny the moment its omissions are mistaken
+  for absences in the thing itself. The wise reader of any map keeps two ideas in mind
+  at once: that the map is not the territory, and that without some map she could not
+  travel at all.
+questions:
+  - id: cars-0001-q1
+    skill: cars-foundations
+    stem: |
+      As used in the passage, the author's claim that a map's "blank spaces are not
+      failures; they are the map's argument about what matters" most nearly means that
+      omissions in a map:
+    choices:
+      - "deliberately express the mapmaker's judgment about what is relevant to a given use"
+      - "reveal the limits of the available surveying technology"
+      - "are errors that careful cartographers learn to eliminate over time"
+      - "matter less than the features the map chooses to include"
+    correct: A
+    explanation: |
+      The sentence equates a map's "blank spaces" with "the map's argument about what
+      matters for a particular journey," and the surrounding text frames the cartographer
+      as an **editor** who chooses what to leave out. The omissions are therefore
+      **purposeful expressions of relevance judgments**, which is what choice A states.
+    choiceExplanations:
+      B: "The passage attributes omissions to deliberate editorial choice, not to technological limits, which it never raises."
+      C: "The author insists the blank spaces are 'not failures' and rejects the idea that more detail is more honest, so omissions are not errors to eliminate."
+      D: "The passage treats omissions and inclusions as two sides of the same judgment; it does not rank one as mattering 'less' than the other."
+  - id: cars-0001-q2
+    skill: cars-reasoning-beyond
+    stem: |
+      Suppose a hospital adopts a new electronic record that captures only data the
+      billing department requires. According to the passage's reasoning, this record is
+      most likely to become problematic when:
+    choices:
+      - "clinicians treat the billing record as a complete account of the patient's condition"
+      - "the record omits some information that the billing department does not need"
+      - "different hospitals format their billing records in different ways"
+      - "the record is smaller and simpler than the patient's full medical history"
+    correct: A
+    explanation: |
+      The passage's central warning is that a purpose-built map "becomes a quiet tyranny
+      the moment its omissions are mistaken for absences in the thing itself" — i.e., when
+      a map made for one purpose is treated as "the world entire." Applying that to a
+      billing-driven record, the danger arises precisely when **clinicians mistake the
+      billing map for the whole clinical territory**, which is choice A.
+    choiceExplanations:
+      B: "The passage holds that purposeful omission is the normal, legitimate function of a map, so omitting unneeded data is not itself the problem."
+      C: "The passage explicitly accepts that 'the same coastline can be rendered a dozen ways' — variation in form is not the source of danger."
+      D: "Being 'smaller, and emptier, than the world' is, in the passage's view, exactly what makes a map useful — not what makes it problematic."
