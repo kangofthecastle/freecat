@@ -4,7 +4,11 @@ import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
 import { registerProfileIpc } from './ipc/profile'
 import { registerGamificationIpc } from './ipc/gamification'
+import { registerContentReviewIpc } from './ipc/content-review'
 import { ensureStarterGrant } from './repositories/activity'
+import { seedTaxonomy } from './repositories/taxonomy'
+import { createLessonStore } from './content/lessons'
+import { contentRoot } from './content/root'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -39,8 +43,11 @@ app.whenReady().then(async () => {
   const db = createDb(`file:${dbPath}`)
   await runMigrations(db, migrationsFolder())
   await ensureStarterGrant(db)
+  await seedTaxonomy(db)
+  const lessonStore = createLessonStore(contentRoot())
   registerProfileIpc(db)
   registerGamificationIpc(db)
+  registerContentReviewIpc(db, lessonStore)
 
   createWindow()
   app.on('activate', () => {

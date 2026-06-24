@@ -97,6 +97,8 @@ A single hierarchy that questions, lessons, and (loosely) flashcards all referen
 
 Modeled as taxonomy nodes `{ id, kind: 'section'|'foundational_concept'|'content_category'|'skill'|'topic', code, title, parentId }`, seeded from the published AAMC content outline; authored content references a `contentCategory` (or `skill` for CARS) plus free-form `topics`. **This is defined in the Qbank brainstorm (with Warren), not pre-built** — how it's used (browsing, tagging, granularity) is a product decision. A draft encoding of the full AAMC outline already exists in git history (commits `6b3880a`, `181bdec`) and can be reused as a starting point.
 
+**Update (2026-06-23, Content Review):** the working taxonomy is **discipline→topic-primary** — 5 disciplines (`gen-chem`, `o-chem`, `biology`, `biochem`, `behavioral-sci`; no Physics/CARS in v1) with ~25 topics, each topic also carrying mapped **AAMC content-category code(s)** as a secondary bridge. It is **DB-seeded** (`taxonomy_node` + `topic_aamc_category`) and was defined in the **Content Review brainstorm** (Qbank built in parallel). The cross-link key is the **topic slug**; Qbank tags questions against it.
+
 ### 5.2 Database & schema ownership
 
 One SQLite file, one Drizzle schema, split by ownership:
@@ -109,6 +111,8 @@ One SQLite file, one Drizzle schema, split by ownership:
 Modules add their own tables and migrations; they reference Foundation tables by id but never alter Foundation-owned tables' meaning.
 
 **Repository convention:** data access lives in `src/main/repositories/*` functions that take the `DB` as a parameter (electron-free, so they're unit-testable against an in-memory libsql DB). Repositories use Drizzle `.returning()` on insert/update (not insert-then-select), and the project runs with TypeScript `noUncheckedIndexedAccess` enabled — so destructure query rows and narrow by guard-and-throw (`const [row] = await …; if (!row) throw …`) rather than unchecked `[0]` access or `!` assertions. Modules follow both.
+
+**Update (2026-06-23):** because Content Review executed first (Qbank built in parallel), **Content Review establishes the shared `taxonomy` tables** (`taxonomy_node` + `topic_aamc_category`); **Qbank consumes them and must not create its own taxonomy migration.** Content Review owns `lesson_progress`. Qbank still owns its attempts/sessions/flags + the `content_registry` table.
 
 ### 5.3 IPC data-layer contract
 
@@ -139,9 +143,13 @@ content/questions/chem-phys/0042-doppler/
 
 Passages get a folder holding the passage text + images + the questions that reference it.
 
+**Update (2026-06-23):** the generic content **loader (pipeline v0)** is established by Content Review in `src/main/content/` (`loadContentType` + `contentRoot`); Qbank reuses/extends it. Content Review lessons use a **self-contained `body.html`** (interactive HTML rendered in a sandboxed iframe) rather than the original Markdown sketch.
+
 ### 5.6 App shell & design system
 
 Navigation across the three module destinations, shared layout, and components/Tailwind config ported from sat-world. Modules render into provided shell slots/routes; they do not invent their own chrome.
+
+**Update (2026-06-23):** the shell's `navigate` accepts an optional payload — `navigate(key, payload?)` with `{ lessonSlug?, topicSlug? }` — for cross-module deep-links.
 
 ### 5.7 Licensing
 
