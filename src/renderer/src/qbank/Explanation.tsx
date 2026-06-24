@@ -15,7 +15,7 @@ export function Explanation({
   question: PresentedQuestion
   answer: AnswerResult
 }): React.JSX.Element {
-  const [flagged, setFlagged] = useState(false)
+  const [flagged, setFlagged] = useState(question.flagged)
   const [flagBusy, setFlagBusy] = useState(false)
   const [flagError, setFlagError] = useState<string | null>(null)
 

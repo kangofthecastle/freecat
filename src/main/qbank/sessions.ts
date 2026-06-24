@@ -26,7 +26,7 @@ function scopeIds(index: ContentIndex, input: StartSessionInput): string[] {
   return []
 }
 
-function presentQuestion(q: QuestionContent): PresentedQuestion {
+function presentQuestion(q: QuestionContent, flaggedSet: Set<string>): PresentedQuestion {
   return {
     id: q.id,
     section: q.section,
@@ -34,7 +34,8 @@ function presentQuestion(q: QuestionContent): PresentedQuestion {
     skill: q.skill,
     passageId: q.passageId,
     stem: q.stem,
-    choices: [...q.choices]
+    choices: [...q.choices],
+    flagged: flaggedSet.has(q.id)
   }
 }
 
@@ -58,14 +59,17 @@ export async function planSession(
   input: StartSessionInput,
   opts: PlanOptions
 ): Promise<StartSessionResult> {
+  // The flagged set is needed both for the optional `flagged` refine and to mark each presented
+  // question's persisted flag state (so a previously-flagged question shows ★ on re-encounter).
+  const flaggedSet = new Set(await listFlaggedIds(db))
+
   // 1. eligible ids by scope, then intersect with the refine set.
   let eligible = scopeIds(index, input)
   if (input.refine === 'incorrect') {
     const allow = new Set(await latestIncorrectQuestionIds(db))
     eligible = eligible.filter((id) => allow.has(id))
   } else if (input.refine === 'flagged') {
-    const allow = new Set(await listFlaggedIds(db))
-    eligible = eligible.filter((id) => allow.has(id))
+    eligible = eligible.filter((id) => flaggedSet.has(id))
   }
 
   // 2. group eligible ids into units (standalone = 1 question; a passage question pulls
@@ -112,7 +116,7 @@ export async function planSession(
   for (const id of chosenIds) {
     const q = index.byId.get(id)
     if (!q) continue
-    questions.push(presentQuestion(q))
+    questions.push(presentQuestion(q, flaggedSet))
     if (q.passageId && !passages[q.passageId]) {
       const p = index.passagesById.get(q.passageId)
       if (p) passages[q.passageId] = { id: p.id, passage: p.passage }

@@ -57,6 +57,12 @@ export function buildTaxonomyTree(nodes: TaxonomyNodeDto[]): TaxonomyTree {
       carsSkills.push(option)
     } else if (n.kind === 'content_category') {
       contentCategoriesBySection.get(secCode)?.push(option)
+    } else {
+      // A skill outside CARS has no scope bucket today and would otherwise vanish silently —
+      // surface it so a future science-section skill isn't invisibly dropped from the Composer.
+      console.warn(
+        `taxonomy-tree: skill "${n.code}" under non-CARS section "${secCode}" has no scope bucket and was dropped`
+      )
     }
   }
 

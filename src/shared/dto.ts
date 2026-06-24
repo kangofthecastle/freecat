@@ -48,6 +48,8 @@ export interface PresentedQuestion {
   passageId: string | null
   stem: string
   choices: string[] // always length 4
+  /** Whether this question is currently flagged (persisted across sessions). Never an answer-key field. */
+  flagged: boolean
 }
 export interface PresentedPassage { id: string; passage: string }
 

@@ -30,10 +30,6 @@ export function SessionSummary({
     () => new Map(questions.map((q) => [q.id, q])),
     [questions]
   )
-  const rowByQuestion = useMemo(
-    () => new Map(summary.rows.map((r) => [r.questionId, r])),
-    [summary.rows]
-  )
 
   const pct = summary.total > 0 ? Math.round((summary.correct / summary.total) * 100) : 0
 

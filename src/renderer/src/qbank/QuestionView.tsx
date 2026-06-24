@@ -32,17 +32,26 @@ export function QuestionView({
 }: QuestionViewProps): React.JSX.Element {
   const [selected, setSelected] = useState<ChoiceLetter | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const locked = answer !== null
 
   const submit = async (): Promise<void> => {
-    if (!selected || locked) return
+    if (!selected || locked || submitting) return
     setSubmitting(true)
     setError(null)
     const result = await onSubmit(question.id, selected)
     setSubmitting(false)
     if (!result) setError('We could not record that answer. Please try again.')
+  }
+
+  // Guard against a rapid double-click on Next/Finish: the last unit's onNext kicks off
+  // completeSession, and firing it twice would create a duplicate completion request.
+  const advance = (): void => {
+    if (advancing) return
+    setAdvancing(true)
+    onNext()
   }
 
   return (
@@ -76,8 +85,9 @@ export function QuestionView({
           {renderExplanation(question, answer)}
           <button
             type="button"
-            onClick={onNext}
-            className="rounded-lg bg-gray-800 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-gray-900"
+            onClick={advance}
+            disabled={advancing}
+            className="rounded-lg bg-gray-800 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-gray-900 disabled:opacity-50"
           >
             {nextLabel}
           </button>

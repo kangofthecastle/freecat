@@ -32,11 +32,13 @@ export function Composer({
   onStart
 }: {
   initialScope?: InitialScope
-  onStart: (input: StartSessionInput) => void
+  /** May be async (it calls startSession); the Composer disables Start while it is pending. */
+  onStart: (input: StartSessionInput) => void | Promise<void>
 }): React.JSX.Element {
   const [tree, setTree] = useState<TaxonomyTree | null>(null)
   const [counts, setCounts] = useState<ComposerData | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [starting, setStarting] = useState(false)
 
   const [scope, setScope] = useState<string>(scopeValue(initialScope?.scopeKind ?? 'mixed', initialScope?.scopeCode))
   const [refine, setRefine] = useState<Refine>('all')
@@ -65,9 +67,16 @@ export function Composer({
     if (initialScope) setScope(scopeValue(initialScope.scopeKind, initialScope.scopeCode))
   }, [initialScope])
 
-  const start = (): void => {
+  const start = async (): Promise<void> => {
+    if (starting) return
     const { scopeKind, scopeCode } = parseScopeValue(scope)
-    onStart({ scopeKind, scopeCode, refine, count })
+    setStarting(true)
+    try {
+      await onStart({ scopeKind, scopeCode, refine, count })
+    } finally {
+      // If onStart navigated away this component is unmounting; the setState is a harmless no-op.
+      setStarting(false)
+    }
   }
 
   const refineOptions = useMemo(
@@ -196,11 +205,11 @@ export function Composer({
 
       <button
         type="button"
-        onClick={start}
-        disabled={!tree}
+        onClick={() => void start()}
+        disabled={!tree || starting}
         className="w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
       >
-        Start session
+        {starting ? 'Starting…' : 'Start session'}
       </button>
     </div>
   )

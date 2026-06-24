@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { PageProps } from '../App'
 import type { StartSessionInput, StartSessionResult } from '../../../shared/dto'
 import { Composer, type InitialScope } from '../qbank/Composer'
@@ -15,8 +15,13 @@ export default function Qbank(_props: PageProps): React.JSX.Element {
   const [session, setSession] = useState<StartSessionResult | null>(null)
   const [record, setRecord] = useState<SessionRecord | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
+  // Synchronous re-entry guard so a double-click can never fire two concurrent startSession
+  // calls (which would create an orphaned qbank_session row).
+  const startingRef = useRef(false)
 
   const start = useCallback(async (input: StartSessionInput): Promise<void> => {
+    if (startingRef.current) return
+    startingRef.current = true
     setStartError(null)
     try {
       const result = await window.freecat.qbank.startSession(input)
@@ -31,6 +36,8 @@ export default function Qbank(_props: PageProps): React.JSX.Element {
     } catch (e) {
       console.error('startSession threw', e)
       setStartError('We could not start a session just now. Please try again.')
+    } finally {
+      startingRef.current = false
     }
   }, [])
 
