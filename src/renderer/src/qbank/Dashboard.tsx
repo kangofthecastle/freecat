@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import type { DashboardStats, TaxonomyNodeDto } from '../../../shared/dto'
-import { buildTaxonomyTree, type TaxonomyTree } from './taxonomy-tree'
+import { useEffect, useMemo, useState } from 'react'
+import type { DashboardStats, TopicAccuracy } from '../../../shared/dto'
+import { buildScopeTree, type ScopeTree } from './scope-tree'
 import type { InitialScope } from './Composer'
 
 function accuracyPct(correct: number, answered: number): number | null {
@@ -18,16 +18,16 @@ function heatTone(pct: number | null): string {
 
 export function Dashboard({ onScope }: { onScope: (scope: InitialScope) => void }): React.JSX.Element {
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [tree, setTree] = useState<TaxonomyTree | null>(null)
+  const [tree, setTree] = useState<ScopeTree | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     let alive = true
-    Promise.all([window.freecat.qbank.getDashboard(), window.freecat.taxonomy.list()])
-      .then(([s, nodes]: [DashboardStats, TaxonomyNodeDto[]]) => {
+    Promise.all([window.freecat.qbank.dashboard(), window.freecat.taxonomy.list()])
+      .then(([s, disciplines]) => {
         if (!alive) return
         setStats(s)
-        setTree(buildTaxonomyTree(nodes))
+        setTree(buildScopeTree(disciplines))
         setLoadFailed(false)
       })
       .catch((e) => {
@@ -39,7 +39,11 @@ export function Dashboard({ onScope }: { onScope: (scope: InitialScope) => void 
     }
   }, [])
 
-  const label = (code: string): string => tree?.titleByCode.get(code) ?? code
+  // topic slug -> its accuracy row, so the discipline→topic tree can overlay scores.
+  const topicAccuracy = useMemo(
+    (): Map<string, TopicAccuracy> => new Map((stats?.byTopic ?? []).map((t) => [t.topic, t])),
+    [stats]
+  )
 
   if (loadFailed) {
     return (
@@ -52,79 +56,93 @@ export function Dashboard({ onScope }: { onScope: (scope: InitialScope) => void 
     )
   }
 
-  const overallPct = stats ? accuracyPct(stats.overall.correct, stats.overall.answered) : null
+  const overallPct = stats ? accuracyPct(stats.totalCorrect, stats.totalAnswered) : null
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
       <h2 className="text-3xl font-bold text-gray-800">Your performance</h2>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <StatTile
           label="Overall accuracy"
           value={overallPct === null ? '—' : `${overallPct}%`}
-          sub={stats ? `${stats.overall.correct}/${stats.overall.answered}` : ''}
+          sub={stats ? `${stats.totalCorrect}/${stats.totalAnswered}` : ''}
         />
-        <StatTile label="Answered" value={stats ? String(stats.overall.answered) : '—'} />
-        <StatTile label="Incorrect" value={stats ? String(stats.incorrectCount) : '—'} />
-        <StatTile label="Flagged" value={stats ? String(stats.flaggedCount) : '—'} />
+        <StatTile label="Answered" value={stats ? String(stats.totalAnswered) : '—'} />
+        <StatTile label="Correct" value={stats ? String(stats.totalCorrect) : '—'} />
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
-        <h3 className="mb-3 text-lg font-semibold text-gray-700">By section</h3>
-        {stats && stats.bySection.length > 0 ? (
-          <div className="space-y-3">
-            {stats.bySection.map((s) => {
-              const pct = accuracyPct(s.correct, s.answered)
+        <h3 className="mb-1 text-lg font-semibold text-gray-700">By discipline & topic</h3>
+        <p className="mb-3 text-sm text-gray-500">Tap a topic to practice it.</p>
+        {tree && stats ? (
+          <div className="space-y-5">
+            {tree.disciplines.map((d) => {
+              const dStats = stats.byDiscipline.find((x) => x.discipline === d.discipline)
+              const dPct = dStats ? accuracyPct(dStats.correct, dStats.answered) : null
               return (
-                <div key={s.section}>
-                  <div className="mb-1 flex justify-between text-sm">
-                    <span className="font-medium text-gray-700">{label(s.section)}</span>
-                    <span className="text-gray-500">
-                      {pct === null ? '—' : `${pct}%`} ({s.correct}/{s.answered})
+                <div key={d.discipline}>
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <span className="font-semibold text-gray-800">{d.title}</span>
+                    <span className="text-sm text-gray-500">
+                      {dPct === null ? 'Not started' : `${dPct}%`}
+                      {dStats && dStats.answered > 0 ? ` (${dStats.correct}/${dStats.answered})` : ''}
                     </span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className="h-full rounded-full bg-blue-500 transition-[width]"
-                      style={{ width: `${pct ?? 0}%` }}
-                    />
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {d.topics.map((t) => {
+                      const acc = topicAccuracy.get(t.slug)
+                      const pct = acc ? accuracyPct(acc.correct, acc.answered) : null
+                      return (
+                        <button
+                          key={t.slug}
+                          type="button"
+                          onClick={() => onScope({ scopeKind: 'topic', scopeCode: t.slug })}
+                          className={`rounded-xl p-3 text-left ring-1 transition hover:brightness-95 ${heatTone(pct)}`}
+                        >
+                          <p className="truncate text-xs font-semibold" title={t.title}>
+                            {t.title}
+                          </p>
+                          <p className="mt-1 text-lg font-bold">{pct === null ? '—' : `${pct}%`}</p>
+                          <p className="text-xs opacity-70">
+                            {acc ? `${acc.correct}/${acc.answered}` : 'no attempts'}
+                          </p>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )
             })}
           </div>
         ) : (
-          <p className="text-gray-500">No attempts yet — finish a session to see your sections.</p>
+          <p className="text-gray-500">Loading…</p>
         )}
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
-        <h3 className="mb-1 text-lg font-semibold text-gray-700">By content category</h3>
-        <p className="mb-3 text-sm text-gray-500">Tap a category to practice it.</p>
-        {stats && stats.byContentCategory.length > 0 ? (
+        <h3 className="mb-1 text-lg font-semibold text-gray-700">By AAMC content category</h3>
+        {stats && stats.byAamc.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {stats.byContentCategory.map((c) => {
+            {stats.byAamc.map((c) => {
               const pct = accuracyPct(c.correct, c.answered)
               return (
-                <button
-                  key={c.contentCategory}
-                  type="button"
-                  onClick={() => onScope({ scopeKind: 'content_category', scopeCode: c.contentCategory })}
-                  className={`rounded-xl p-3 text-left ring-1 transition hover:brightness-95 ${heatTone(pct)}`}
-                >
-                  <p className="text-xs font-semibold">{c.contentCategory}</p>
-                  <p className="truncate text-xs opacity-80">{label(c.contentCategory)}</p>
+                <div key={c.code} className={`rounded-xl p-3 ring-1 ${heatTone(pct)}`}>
+                  <p className="text-xs font-semibold">{c.code}</p>
+                  <p className="truncate text-xs opacity-80" title={c.title}>
+                    {c.title}
+                  </p>
                   <p className="mt-1 text-lg font-bold">{pct === null ? '—' : `${pct}%`}</p>
                   <p className="text-xs opacity-70">
                     {c.correct}/{c.answered}
                   </p>
-                </button>
+                </div>
               )
             })}
           </div>
         ) : (
           <p className="text-gray-500">
-            No content-category data yet — answer some science questions to fill this in.
+            No content-category data yet — answer some tagged questions to fill this in.
           </p>
         )}
       </section>
