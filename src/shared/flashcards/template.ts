@@ -35,7 +35,9 @@ function applyFilter(filter: string, fieldName: string, value: string, ctx: Temp
     case 'text': return stripHtml(value)
     case 'hint': return isEmptyField(value) ? '' : `<details class="hint"><summary>${fieldName}</summary>${value}</details>`
     case 'type': return `<div class="type-answer">${stripHtml(value)}</div>`
-    case 'cloze': return ctx.clozeOrdinal == null ? value : renderClozeField(value, ctx.clozeOrdinal, ctx.side)
+    // ordinal 0 matches no deletion (Anki ordinals start at 1) → all deletions render inactive, so a
+    // standard note type misusing {{cloze:}} never leaks raw {{cN::}} markup to the iframe.
+    case 'cloze': return renderClozeField(value, ctx.clozeOrdinal ?? 0, ctx.side)
     default: return value // unknown filter → identity (total, Anki-faithful)
   }
 }

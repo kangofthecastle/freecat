@@ -64,6 +64,13 @@ describe('renderTemplate', () => {
       .toBe('<span class="cloze" data-cloze="a" data-ordinal="1">[…]</span> <span class="cloze-inactive" data-ordinal="2">b</span>')
   })
 
+  it('{{cloze:Field}} with no active ordinal strips the markup (never leaks raw {{cN::}})', () => {
+    const c = ctx({ fields: { Text: '{{c1::a}}' }, clozeOrdinal: null })
+    const out = renderTemplate('{{cloze:Text}}', c)
+    expect(out).not.toContain('{{c1')
+    expect(out).toBe('<span class="cloze-inactive" data-ordinal="1">a</span>')
+  })
+
   it('leaves an unbalanced tag as literal', () => {
     expect(renderTemplate('a{{Front', ctx())).toBe('a{{Front')
   })

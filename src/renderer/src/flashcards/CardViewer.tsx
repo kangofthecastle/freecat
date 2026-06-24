@@ -38,8 +38,8 @@ export function CardViewer({ cardId }: { cardId: number }): React.JSX.Element {
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  if (failed) return <div className="rounded-lg bg-amber-50 p-6 text-amber-800">This card could not be loaded.</div>
-  if (!view) return <div className="p-6 text-gray-400">Loading…</div>
+  if (failed) return <div role="alert" className="rounded-lg bg-amber-50 p-6 text-amber-800">This card could not be loaded.</div>
+  if (!view) return <div role="status" className="p-6 text-gray-400">Loading…</div>
 
   if (view.renderKind === 'image-occlusion')
     return <Placeholder title="Image Occlusion card" body="Rendering coming in a later milestone." />
@@ -55,14 +55,14 @@ export function CardViewer({ cardId }: { cardId: number }): React.JSX.Element {
     srcDoc = buildCardHtml(view, side, MATHJAX_SVG_SRC)
   } catch (e) {
     console.error('buildCardHtml failed', e)
-    return <div className="rounded-lg bg-amber-50 p-6 text-amber-800">This card could not be loaded.</div>
+    return <div role="alert" className="rounded-lg bg-amber-50 p-6 text-amber-800">This card could not be loaded.</div>
   }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setSide(side === 'question' ? 'answer' : 'question')}
+          onClick={() => { setHeight(160); setSide((s) => (s === 'question' ? 'answer' : 'question')) }}
           className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
         >
           {side === 'question' ? 'Show answer' : 'Show question'}

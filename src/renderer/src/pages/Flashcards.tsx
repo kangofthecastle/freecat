@@ -30,7 +30,7 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
     } finally { setImporting(false) }
   }, [loadDeckSets])
 
-  if (deckSets === null) return <div className="p-8 text-gray-400">Loading…</div>
+  if (deckSets === null) return <div role="status" className="p-8 text-gray-400">Loading…</div>
 
   if (deckSets.length === 0) {
     return (
@@ -39,7 +39,7 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
         <h2 className="mt-4 text-2xl font-bold text-gray-800">No decks yet</h2>
         <p className="mt-2 text-gray-500">Import an Anki deck package (.apkg or .colpkg) to start browsing your cards.</p>
         <ImportButton importing={importing} onImport={onImport} />
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
     )
   }
@@ -51,7 +51,7 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
           <h2 className="text-lg font-bold text-gray-800">Decks</h2>
           <ImportButton importing={importing} onImport={onImport} compact />
         </div>
-        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="mb-2 text-sm text-red-600">{error}</p>}
         <div className="space-y-4">
           {deckSets.map((ds) => (
             <DeckSetBlock
@@ -122,7 +122,7 @@ function DeckSetBlock({ ds, selectedDeckId, onSelectDeck, onDeleted }: {
       </div>
       <div className="mt-1">
         {decks === null
-          ? <p className="text-xs text-gray-300">Loading…</p>
+          ? <p role="status" className="text-xs text-gray-300">Loading…</p>
           : decks.map((d) => <DeckRow key={d.deckId} node={d} depth={0} selectedDeckId={selectedDeckId} onSelectDeck={onSelectDeck} />)}
       </div>
     </div>
@@ -141,10 +141,11 @@ function DeckRow({ node, depth, selectedDeckId, onSelectDeck }: {
     <div>
       <div className="flex items-center" style={{ paddingLeft: depth * 12 }}>
         {hasChildren
-          ? <button onClick={() => setOpen(!open)} className="w-4 shrink-0 text-gray-400" aria-label={open ? 'Collapse' : 'Expand'}>{open ? '▾' : '▸'}</button>
+          ? <button onClick={() => setOpen(!open)} className="w-4 shrink-0 text-gray-400" aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}>{open ? '▾' : '▸'}</button>
           : <span className="w-4 shrink-0" />}
         <button
           onClick={() => onSelectDeck(node.deckId)}
+          aria-current={selectedDeckId === node.deckId ? 'true' : undefined}
           className={`flex-1 truncate rounded px-2 py-1 text-left text-sm ${selectedDeckId === node.deckId ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
         >
           {node.leafName} <span className="text-xs opacity-60">({node.cardCount})</span>
@@ -194,7 +195,7 @@ function CardList({ deckId, selectedCardId, onSelect }: {
 
   useEffect(() => { reqIdRef.current += 1; inFlightAfterRef.current.clear(); setCards([]); setNextAfterId(null); setLoading(false); void loadPage(null) }, [deckId, loadPage])
 
-  if (cards.length === 0 && !loading) return <p className="p-4 text-sm text-gray-400">No cards in this deck.</p>
+  if (cards.length === 0 && !loading) return <p role="status" className="p-4 text-sm text-gray-400">No cards in this deck.</p>
 
   return (
     <ul className="divide-y divide-gray-100">
@@ -202,6 +203,7 @@ function CardList({ deckId, selectedCardId, onSelect }: {
         <li key={c.cardId}>
           <button
             onClick={() => onSelect(c.cardId)}
+            aria-current={selectedCardId === c.cardId ? 'true' : undefined}
             className={`flex w-full items-center gap-2 px-3 py-2 text-left ${selectedCardId === c.cardId ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
           >
             <RenderKindBadge kind={c.renderKind} />
