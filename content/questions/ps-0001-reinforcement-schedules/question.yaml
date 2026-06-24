@@ -1,6 +1,6 @@
 id: ps-0001-reinforcement-schedules
-contentCategory: "7A"
-topics: [operant-conditioning, reinforcement-schedules, extinction]
+topic: behavioral-sci.learning-memory-cognition
+tags: [{ vocab: aamc, code: '7A' }]
 stem: |
   A behavioral researcher trains two rats to press a lever for food. Rat A receives a
   food pellet after **every** press. Rat B receives a pellet only after an

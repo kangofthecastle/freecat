@@ -1,6 +1,6 @@
 id: bb-0001-competitive-inhibition
-contentCategory: "1A"
-topics: [enzyme-kinetics, michaelis-menten, competitive-inhibition]
+topic: biochem.enzymes
+tags: [{ vocab: aamc, code: '1A' }]
 passage: |
   A research team studies a bacterial dehydrogenase, **EnzD**, that converts a
   small substrate **S** into product **P**. Working at a fixed, saturating enzyme

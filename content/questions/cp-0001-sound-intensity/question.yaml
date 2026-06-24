@@ -1,6 +1,6 @@
 id: cp-0001-sound-intensity
-contentCategory: "4D"
-topics: [sound-intensity, decibels, logarithms]
+topic: physics.waves-sound-light
+tags: [{ vocab: aamc, code: '4D' }]
 stem: |
   Sound intensity level $\beta$ (in decibels) relates to intensity $I$ by
   $\beta = 10 \log_{10}\!\left(\dfrac{I}{I_0}\right)$, where
