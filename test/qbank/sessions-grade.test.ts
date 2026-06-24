@@ -13,10 +13,10 @@ const NOW = new Date('2026-06-22T12:00:00Z')
 function q(id: string, over: Partial<QuestionContent> = {}): QuestionContent {
   return {
     id,
+    topic: 'physics.mechanics',
+    discipline: 'physics',
     section: 'chem-phys',
-    contentCategory: '4A',
-    skill: null,
-    topics: [],
+    tags: [{ vocab: 'aamc', code: '4A' }],
     passageId: null,
     stem: `stem ${id}`,
     choices: ['a', 'b', 'c', 'd'],
@@ -30,20 +30,22 @@ function q(id: string, over: Partial<QuestionContent> = {}): QuestionContent {
 function makeIndex(): ContentIndex {
   const byId = new Map<string, QuestionContent>([
     ['cp-q1', q('cp-q1')],
-    ['bb-q1', q('bb-q1', { section: 'bio-biochem', contentCategory: null, skill: 'cars-comprehension', passageId: 'bb-p1', correct: 'C' })]
+    ['bb-q1', q('bb-q1', { topic: 'biochem.enzymes', discipline: 'biochem', section: 'bio-biochem', tags: [{ vocab: 'aamc', code: '1A' }], passageId: 'bb-p1', correct: 'C' })]
   ])
-  const passage: PassageContent = { id: 'bb-p1', section: 'bio-biochem', passage: 'prose', questionIds: ['bb-q1'] }
+  const passage: PassageContent = { id: 'bb-p1', topic: 'biochem.enzymes', discipline: 'biochem', section: 'bio-biochem', passage: 'prose', questionIds: ['bb-q1'] }
   return {
     byId,
     passagesById: new Map<string, PassageContent>([['bb-p1', passage]]),
-    bySection: new Map<string, string[]>([['chem-phys', ['cp-q1']], ['bio-biochem', ['bb-q1']]]),
-    byContentCategory: new Map<string, string[]>([['4A', ['cp-q1']]]),
-    bySkill: new Map<string, string[]>([['cars-comprehension', ['bb-q1']]]),
-    allQuestionIds: ['cp-q1', 'bb-q1']
+    byTopic: new Map<string, string[]>([['physics.mechanics', ['cp-q1']], ['biochem.enzymes', ['bb-q1']]]),
+    byDiscipline: new Map<string, string[]>([['physics', ['cp-q1']], ['biochem', ['bb-q1']]]),
+    byTag: new Map<string, string[]>([['aamc:4A', ['cp-q1']], ['aamc:1A', ['bb-q1']]]),
+    allQuestionIds: ['cp-q1', 'bb-q1'],
+    errors: []
   }
 }
 
 const ACTIVITY: ActivityResult = { streak: 1, daily: { count: 1, goal: 30, met: false }, eggBecameReady: false, goalJustMet: false }
+// recordActivity's signature is (db, params), so the params live at mock.calls[i][1].
 const fakeRecord = vi.fn(async (..._args: Parameters<RecordActivityFn>): Promise<ServiceResult<ActivityResult>> => ok(ACTIVITY))
 
 let db: DB
@@ -58,7 +60,7 @@ beforeEach(async () => {
 })
 
 describe('gradeAndRecord', () => {
-  it('records a correct attempt (denormalized tags) and returns the answer key + activity', async () => {
+  it('records a correct attempt (denormalized topic/discipline) and returns the answer key + activity', async () => {
     const r = await gradeAndRecord(index, db, { sessionId, questionId: 'cp-q1', choice: 'A', timeMs: 1500 },
       { now: NOW, recordActivityFn: fakeRecord })
     expect(r.ok).toBe(true)
@@ -73,19 +75,20 @@ describe('gradeAndRecord', () => {
     const [att] = await getSessionAttempts(db, sessionId)
     expect(att?.questionId).toBe('cp-q1')
     expect(att?.passageId).toBeNull()
+    expect(att?.topic).toBe('physics.mechanics')
+    expect(att?.discipline).toBe('physics')
     expect(att?.section).toBe('chem-phys')
-    expect(att?.contentCategory).toBe('4A')
-    expect(att?.skill).toBeNull()
     expect(att?.chosen).toBe('A')
     expect(att?.isCorrect).toBe(true)
     expect(att?.timeMs).toBe(1500)
 
-    // gamification fired with the content-category taxonomyRef
+    // gamification fired with the question's topic as taxonomyRef
     expect(fakeRecord).toHaveBeenCalledTimes(1)
-    expect(fakeRecord.mock.calls[0]?.[1]).toMatchObject({ kind: 'qbank.answer', taxonomyRef: '4A', now: NOW })
+    expect(fakeRecord.mock.calls[0]?.[1]).toMatchObject({ kind: 'qbank.answer', taxonomyRef: 'physics.mechanics', now: NOW })
+    expect(fakeRecord.mock.calls[0]?.[1].taxonomyRef).toBe('physics.mechanics')
   })
 
-  it('falls back to the skill code as taxonomyRef and denormalizes passageId', async () => {
+  it('uses the question topic as taxonomyRef and denormalizes passageId for a passage question', async () => {
     const r = await gradeAndRecord(index, db, { sessionId, questionId: 'bb-q1', choice: 'C' },
       { now: NOW, recordActivityFn: fakeRecord })
     expect(r.ok).toBe(true)
@@ -93,10 +96,10 @@ describe('gradeAndRecord', () => {
     expect(r.data.correct).toBe(true)
     const [att] = await getSessionAttempts(db, sessionId)
     expect(att?.passageId).toBe('bb-p1')
+    expect(att?.topic).toBe('biochem.enzymes')
+    expect(att?.discipline).toBe('biochem')
     expect(att?.section).toBe('bio-biochem')
-    expect(att?.contentCategory).toBeNull()
-    expect(att?.skill).toBe('cars-comprehension')
-    expect(fakeRecord.mock.calls[0]?.[1]).toMatchObject({ kind: 'qbank.answer', taxonomyRef: 'cars-comprehension' })
+    expect(fakeRecord.mock.calls[0]?.[1].taxonomyRef).toBe('biochem.enzymes')
   })
 
   it('returns correct:false for a wrong choice', async () => {
@@ -118,7 +121,7 @@ describe('gradeAndRecord', () => {
     expect(fakeRecord).not.toHaveBeenCalled()
   })
 
-  it('still returns ok with activity:null when recordActivityFn throws', async () => {
+  it('still returns ok with activity:null when recordActivityFn throws (gamification failure swallowed)', async () => {
     const throwing = vi.fn(async (..._args: Parameters<RecordActivityFn>): Promise<ServiceResult<ActivityResult>> => { throw new Error('boom') })
     const r = await gradeAndRecord(index, db, { sessionId, questionId: 'cp-q1', choice: 'A' },
       { now: NOW, recordActivityFn: throwing })

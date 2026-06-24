@@ -19,19 +19,18 @@ export interface GradeOptions { now: Date; recordActivityFn?: RecordActivityFn }
 
 /** Eligible question ids for the requested scope (mixed → everything). */
 function scopeIds(index: ContentIndex, input: StartSessionInput): string[] {
-  if (input.scopeKind === 'mixed' || !input.scopeCode) return index.allQuestionIds
-  if (input.scopeKind === 'section') return index.bySection.get(input.scopeCode) ?? []
-  if (input.scopeKind === 'content_category') return index.byContentCategory.get(input.scopeCode) ?? []
-  if (input.scopeKind === 'skill') return index.bySkill.get(input.scopeCode) ?? []
-  return []
+  if (input.scopeKind === 'topic') return index.byTopic.get(input.scopeCode ?? '') ?? []
+  if (input.scopeKind === 'discipline') return index.byDiscipline.get(input.scopeCode ?? '') ?? []
+  return index.allQuestionIds
 }
 
-function presentQuestion(q: QuestionContent, flaggedSet: Set<string>): PresentedQuestion {
+/** Strip a stored question to its renderer-facing shape: topic + section for display,
+ *  the stem/choices to answer, and the persisted flag state — never the answer key. */
+export function presentQuestion(q: QuestionContent, flaggedSet: Set<string>): PresentedQuestion {
   return {
     id: q.id,
+    topic: q.topic,
     section: q.section,
-    contentCategory: q.contentCategory,
-    skill: q.skill,
     passageId: q.passageId,
     stem: q.stem,
     choices: [...q.choices],
@@ -140,9 +139,9 @@ export async function gradeAndRecord(
     sessionId: input.sessionId,
     questionId: q.id,
     passageId: q.passageId,
+    topic: q.topic,
+    discipline: q.discipline,
     section: q.section,
-    contentCategory: q.contentCategory,
-    skill: q.skill,
     chosen: input.choice,
     isCorrect,
     timeMs: input.timeMs ?? null,
@@ -155,7 +154,7 @@ export async function gradeAndRecord(
   try {
     const res = await record(db, {
       kind: 'qbank.answer',
-      taxonomyRef: q.contentCategory ?? q.skill ?? undefined,
+      taxonomyRef: q.topic,
       now: opts.now
     })
     if (res.ok) activity = res.data

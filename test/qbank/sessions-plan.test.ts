@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import type { ContentIndex, QuestionContent, PassageContent } from '../../src/main/content/types'
-import { planSession, summarize } from '../../src/main/qbank/sessions'
+import { planSession, presentQuestion, summarize } from '../../src/main/qbank/sessions'
 import { createSession } from '../../src/main/repositories/qbank-sessions'
 import { recordAttempt } from '../../src/main/repositories/qbank-attempts'
 import { toggleFlag } from '../../src/main/repositories/qbank-flags'
@@ -13,10 +13,10 @@ const NOW = new Date('2026-06-22T12:00:00Z')
 function q(id: string, over: Partial<QuestionContent> = {}): QuestionContent {
   return {
     id,
+    topic: 'physics.mechanics',
+    discipline: 'physics',
     section: 'chem-phys',
-    contentCategory: '4A',
-    skill: null,
-    topics: [],
+    tags: [{ vocab: 'aamc', code: '4A' }],
     passageId: null,
     stem: `stem ${id}`,
     choices: ['a', 'b', 'c', 'd'],
@@ -30,10 +30,12 @@ function q(id: string, over: Partial<QuestionContent> = {}): QuestionContent {
 function makeIndex(): ContentIndex {
   const cpq1 = q('cp-q1')
   const cpq2 = q('cp-q2')
-  const bbq1 = q('bb-q1', { section: 'bio-biochem', contentCategory: '1A', passageId: 'bb-p1', correct: 'B' })
-  const bbq2 = q('bb-q2', { section: 'bio-biochem', contentCategory: '1A', passageId: 'bb-p1', correct: 'C' })
+  const bbq1 = q('bb-q1', { topic: 'biochem.enzymes', discipline: 'biochem', section: 'bio-biochem', tags: [{ vocab: 'aamc', code: '1A' }], passageId: 'bb-p1', correct: 'B' })
+  const bbq2 = q('bb-q2', { topic: 'biochem.enzymes', discipline: 'biochem', section: 'bio-biochem', tags: [{ vocab: 'aamc', code: '1A' }], passageId: 'bb-p1', correct: 'C' })
   const passage: PassageContent = {
     id: 'bb-p1',
+    topic: 'biochem.enzymes',
+    discipline: 'biochem',
     section: 'bio-biochem',
     passage: 'passage prose',
     questionIds: ['bb-q1', 'bb-q2']
@@ -44,16 +46,20 @@ function makeIndex(): ContentIndex {
   return {
     byId,
     passagesById: new Map<string, PassageContent>([['bb-p1', passage]]),
-    bySection: new Map<string, string[]>([
-      ['chem-phys', ['cp-q1', 'cp-q2']],
-      ['bio-biochem', ['bb-q1', 'bb-q2']]
+    byTopic: new Map<string, string[]>([
+      ['physics.mechanics', ['cp-q1', 'cp-q2']],
+      ['biochem.enzymes', ['bb-q1', 'bb-q2']]
     ]),
-    byContentCategory: new Map<string, string[]>([
-      ['4A', ['cp-q1', 'cp-q2']],
-      ['1A', ['bb-q1', 'bb-q2']]
+    byDiscipline: new Map<string, string[]>([
+      ['physics', ['cp-q1', 'cp-q2']],
+      ['biochem', ['bb-q1', 'bb-q2']]
     ]),
-    bySkill: new Map<string, string[]>(),
-    allQuestionIds: ['cp-q1', 'cp-q2', 'bb-q1', 'bb-q2']
+    byTag: new Map<string, string[]>([
+      ['aamc:4A', ['cp-q1', 'cp-q2']],
+      ['aamc:1A', ['bb-q1', 'bb-q2']]
+    ]),
+    allQuestionIds: ['cp-q1', 'cp-q2', 'bb-q1', 'bb-q2'],
+    errors: []
   }
 }
 
@@ -64,12 +70,36 @@ let db: DB
 let index: ContentIndex
 beforeEach(async () => { db = await createTestDb(); index = makeIndex() })
 
+describe('presentQuestion', () => {
+  it('returns the topic-axis shape with no answer key and flagged reflecting the set', () => {
+    const flagged = new Set<string>(['cp-q1'])
+    const presented = presentQuestion(q('cp-q1'), flagged)
+    expect(presented).toEqual({
+      id: 'cp-q1',
+      topic: 'physics.mechanics',
+      section: 'chem-phys',
+      passageId: null,
+      stem: 'stem cp-q1',
+      choices: ['a', 'b', 'c', 'd'],
+      flagged: true
+    })
+    // a clean object: no answer key, no retired AAMC fields
+    expect(presented).not.toHaveProperty('correct')
+    expect(presented).not.toHaveProperty('explanation')
+    expect(presented).not.toHaveProperty('skill')
+    expect(presented).not.toHaveProperty('contentCategory')
+    // an unflagged id reflects false
+    expect(presentQuestion(q('cp-q2'), flagged).flagged).toBe(false)
+  })
+})
+
 describe('planSession', () => {
-  it('is deterministic under a fixed rng and persists a session', async () => {
+  it('is deterministic under a fixed rng and persists a session (mixed → all)', async () => {
     const r = await planSession(index, db, { scopeKind: 'mixed', refine: 'all', count: 2 }, { now: NOW, rng: rng0 })
     expect(r.sessionId).toBeGreaterThan(0)
     expect(r.mode).toBe('tutor')
     expect(r.questions.map((x) => x.id)).toEqual(['cp-q1', 'cp-q2'])
+    expect(r.questions[0]?.topic).toBe('physics.mechanics')
     // no answer key leaks
     expect(r.questions[0]).not.toHaveProperty('correct')
     expect(r.questions[0]).not.toHaveProperty('explanation')
@@ -77,11 +107,27 @@ describe('planSession', () => {
     expect(r.passages).toEqual({})
   })
 
+  it("scope 'topic' selects only that topic's question ids", async () => {
+    const r = await planSession(index, db, { scopeKind: 'topic', scopeCode: 'physics.mechanics', refine: 'all', count: 10 }, { now: NOW, rng: rng0 })
+    expect(r.questions.map((x) => x.id)).toEqual(['cp-q1', 'cp-q2'])
+  })
+
+  it("scope 'discipline' selects only that discipline's question ids", async () => {
+    const r = await planSession(index, db, { scopeKind: 'discipline', scopeCode: 'biochem', refine: 'all', count: 10 }, { now: NOW, rng: rng0 })
+    // biochem is the passage; selecting it pulls the whole passage's ordered ids
+    expect(r.questions.map((x) => x.id)).toEqual(['bb-q1', 'bb-q2'])
+  })
+
   it('pulls a passage question whole (sibling included) even when count is 1', async () => {
-    const r = await planSession(index, db, { scopeKind: 'section', scopeCode: 'bio-biochem', refine: 'all', count: 1 }, { now: NOW, rng: rng0 })
+    const r = await planSession(index, db, { scopeKind: 'discipline', scopeCode: 'biochem', refine: 'all', count: 1 }, { now: NOW, rng: rng0 })
     expect(r.questions.map((x) => x.id)).toEqual(['bb-q1', 'bb-q2'])
     expect(Object.keys(r.passages)).toEqual(['bb-p1'])
     expect(r.passages['bb-p1']).toEqual({ id: 'bb-p1', passage: 'passage prose' })
+  })
+
+  it("an unknown scope code yields no eligible questions", async () => {
+    const r = await planSession(index, db, { scopeKind: 'topic', scopeCode: 'does.not-exist', refine: 'all', count: 10 }, { now: NOW, rng: rng0 })
+    expect(r.questions).toEqual([])
   })
 
   it("refine:'flagged' restricts to flagged ids", async () => {
@@ -96,12 +142,12 @@ describe('summarize', () => {
     const session = await createSession(db, { scopeKind: 'mixed', refine: 'all', requestedCount: 2, now: NOW })
     await recordAttempt(db, {
       sessionId: session.id, questionId: 'cp-q1', passageId: null,
-      section: 'chem-phys', contentCategory: '4A', skill: null,
+      topic: 'physics.mechanics', discipline: 'physics', section: 'chem-phys',
       chosen: 'A' as ChoiceLetter, isCorrect: true, now: NOW
     })
     await recordAttempt(db, {
       sessionId: session.id, questionId: 'cp-q2', passageId: null,
-      section: 'chem-phys', contentCategory: '4A', skill: null,
+      topic: 'physics.mechanics', discipline: 'physics', section: 'chem-phys',
       chosen: 'B' as ChoiceLetter, isCorrect: false, now: NOW
     })
     const s = await summarize(db, session.id)
