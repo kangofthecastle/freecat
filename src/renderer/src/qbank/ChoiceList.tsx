@@ -4,8 +4,8 @@ import { Markdown } from './Markdown'
 export const LETTERS: ChoiceLetter[] = ['A', 'B', 'C', 'D']
 
 export interface ChoiceListProps {
-  /** Exactly 4 Markdown choice bodies, index 0 = choice A. */
-  choices: string[]
+  /** Exactly 4 Markdown choice bodies, index 0 = choice A (matches PresentedQuestion.choices). */
+  choices: [string, string, string, string]
   /** The currently pending (pre-submit) selection, if any. */
   selected: ChoiceLetter | null
   /** Selecting a choice; disabled once `locked`. */

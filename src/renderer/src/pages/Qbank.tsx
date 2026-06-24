@@ -115,6 +115,7 @@ export default function Qbank(props: PageProps): React.JSX.Element {
           answers={record.answers}
           onNewSession={newSession}
           onViewDashboard={() => setView('dashboard')}
+          navigate={navigate}
         />
       )}
 

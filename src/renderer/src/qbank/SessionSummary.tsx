@@ -6,6 +6,7 @@ import type {
   SessionSummary as SessionSummaryDto,
   SessionSummaryRow
 } from '../../../shared/dto'
+import type { NavPayload, RouteKey } from '../App'
 import { ChoiceList } from './ChoiceList'
 import { Explanation } from './Explanation'
 import { Markdown } from './Markdown'
@@ -15,7 +16,8 @@ export function SessionSummary({
   questions,
   answers,
   onNewSession,
-  onViewDashboard
+  onViewDashboard,
+  navigate
 }: {
   summary: SessionSummaryDto
   questions: PresentedQuestion[]
@@ -23,6 +25,9 @@ export function SessionSummary({
   answers: Record<string, AnswerResult>
   onNewSession: () => void
   onViewDashboard: () => void
+  /** Optional: threaded into each review's Explanation so post-session review keeps the
+   *  "Review the lesson" cross-link (matches the live session's renderExplanation). */
+  navigate?: (key: RouteKey, payload?: NavPayload) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
 
@@ -78,7 +83,7 @@ export function SessionSummary({
                 {isOpen && (
                   <div className="space-y-4 border-t border-gray-100 p-4">
                     {question ? (
-                      <ReviewBody question={question} answer={answer} row={row} />
+                      <ReviewBody question={question} answer={answer} row={row} navigate={navigate} />
                     ) : (
                       <p className="text-sm text-gray-500">Question detail is unavailable.</p>
                     )}
@@ -113,11 +118,13 @@ export function SessionSummary({
 function ReviewBody({
   question,
   answer,
-  row
+  row,
+  navigate
 }: {
   question: PresentedQuestion
   answer: AnswerResult | null
   row: SessionSummaryRow
+  navigate?: (key: RouteKey, payload?: NavPayload) => void
 }): React.JSX.Element {
   const chosen: ChoiceLetter = row.chosen
   return (
@@ -130,7 +137,7 @@ function ReviewBody({
         locked
         correctChoice={answer?.correctChoice ?? null}
       />
-      {answer && <Explanation question={question} answer={answer} />}
+      {answer && <Explanation question={question} answer={answer} navigate={navigate} />}
     </>
   )
 }
