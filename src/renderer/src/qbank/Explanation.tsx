@@ -1,23 +1,48 @@
-import { useState } from 'react'
-import type { AnswerResult, ChoiceLetter, PresentedQuestion } from '../../../shared/dto'
+import { useEffect, useState } from 'react'
+import type { AnswerResult, ChoiceLetter, LessonRef, PresentedQuestion } from '../../../shared/dto'
+import type { NavPayload, RouteKey } from '../App'
 import { LETTERS } from './ChoiceList'
 import { Markdown } from './Markdown'
 
 /**
  * Shown after submit. The correct/your-wrong-pick highlighting lives in ChoiceList (locked mode);
- * this block adds the verdict banner, the main rationale, per-choice "why it's wrong" notes, and a
- * persistent Flag toggle (qbank.toggleFlag).
+ * this block adds the verdict banner, the main rationale, per-choice "why it's wrong" notes, a
+ * persistent Flag toggle (qbank.toggleFlag), and — when `navigate` is supplied and this question's
+ * topic has an authored lesson — a "Review the lesson" cross-link back into Content Review.
  */
 export function Explanation({
   question,
-  answer
+  answer,
+  navigate
 }: {
   question: PresentedQuestion
   answer: AnswerResult
+  /** Optional: when present, enables the outbound "Review the lesson" link (Qbank closes over App's navigate). */
+  navigate?: (key: RouteKey, payload?: NavPayload) => void
 }): React.JSX.Element {
   const [flagged, setFlagged] = useState(question.flagged)
   const [flagBusy, setFlagBusy] = useState(false)
   const [flagError, setFlagError] = useState<string | null>(null)
+  // Resolved lazily from the question's topic; null until resolved / when no lesson exists.
+  const [lesson, setLesson] = useState<LessonRef | null>(null)
+
+  useEffect(() => {
+    if (!navigate) return
+    let alive = true
+    setLesson(null)
+    window.freecat.contentReview
+      .lessonForTaxonomy(question.topic)
+      .then((ref) => {
+        if (alive) setLesson(ref)
+      })
+      .catch((e) => {
+        console.error('lessonForTaxonomy threw', e)
+        if (alive) setLesson(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [navigate, question.topic])
 
   const toggleFlag = async (): Promise<void> => {
     setFlagBusy(true)
@@ -55,19 +80,30 @@ export function Explanation({
             Answer: {answer.correctChoice}
           </span>
         </p>
-        <button
-          type="button"
-          onClick={() => void toggleFlag()}
-          disabled={flagBusy}
-          aria-pressed={flagged}
-          className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
-            flagged
-              ? 'bg-amber-500 text-white hover:bg-amber-600'
-              : 'bg-white text-amber-700 ring-1 ring-amber-300 hover:bg-amber-50'
-          }`}
-        >
-          {flagged ? '★ Flagged' : '☆ Flag'}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {navigate && lesson && (
+            <button
+              type="button"
+              onClick={() => navigate('content', { lessonSlug: lesson.slug })}
+              className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-blue-700 ring-1 ring-blue-300 transition hover:bg-blue-50"
+            >
+              Review the lesson
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void toggleFlag()}
+            disabled={flagBusy}
+            aria-pressed={flagged}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+              flagged
+                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                : 'bg-white text-amber-700 ring-1 ring-amber-300 hover:bg-amber-50'
+            }`}
+          >
+            {flagged ? '★ Flagged' : '☆ Flag'}
+          </button>
+        </div>
       </div>
       {flagError && <p className="text-sm text-red-600">{flagError}</p>}
 

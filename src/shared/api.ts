@@ -5,6 +5,10 @@ import type {
   SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats, QuestionRef
 } from './dto'
 
+// The qbank submit/flag handlers wrap their result in a ServiceResult (the main process never
+// throws across IPC for a not-found question / a flag write); these renderer-facing signatures
+// mirror that envelope so callers branch on `.ok`.
+
 export interface FreecatApi {
   profile: { get: () => Promise<ProfileDto>; setName: (name: string) => Promise<ProfileDto> }
   gamification: {
@@ -32,9 +36,9 @@ export interface FreecatApi {
   }
   qbank: {
     startSession: (input: StartSessionInput) => Promise<StartSessionResult>
-    submitAnswer: (input: SubmitAnswerInput) => Promise<SubmitAnswerResult>
+    submitAnswer: (input: SubmitAnswerInput) => Promise<ServiceResult<SubmitAnswerResult>>
     completeSession: (sessionId: number) => Promise<SessionSummary>
-    toggleFlag: (questionId: string) => Promise<{ flagged: boolean }>
+    toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>
     dashboard: () => Promise<DashboardStats>
     questionsForTaxonomy: (topicSlug: string) => Promise<QuestionRef[]>
   }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PageProps } from '../App'
 import type { StartSessionInput, StartSessionResult } from '../../../shared/dto'
 import { Composer, type InitialScope } from '../qbank/Composer'
@@ -9,7 +9,11 @@ import { Explanation } from '../qbank/Explanation'
 
 type View = 'composer' | 'session' | 'summary' | 'dashboard'
 
-export default function Qbank(_props: PageProps): React.JSX.Element {
+/** Auto-start length when arriving via a topic deep-link (matches the Composer default). */
+const DEEPLINK_COUNT = 10
+
+export default function Qbank(props: PageProps): React.JSX.Element {
+  const { navigate, navPayload } = props
   const [view, setView] = useState<View>('composer')
   const [scope, setScope] = useState<InitialScope | undefined>(undefined)
   const [session, setSession] = useState<StartSessionResult | null>(null)
@@ -18,6 +22,8 @@ export default function Qbank(_props: PageProps): React.JSX.Element {
   // Synchronous re-entry guard so a double-click can never fire two concurrent startSession
   // calls (which would create an orphaned qbank_session row).
   const startingRef = useRef(false)
+  // Fires the inbound topic deep-link at most once, even under StrictMode's double-effect.
+  const autoStartedRef = useRef(false)
 
   const start = useCallback(async (input: StartSessionInput): Promise<void> => {
     if (startingRef.current) return
@@ -40,6 +46,15 @@ export default function Qbank(_props: PageProps): React.JSX.Element {
       startingRef.current = false
     }
   }, [])
+
+  // Inbound cross-link: a topic deep-link (e.g. from a CR lesson's "Practice this topic")
+  // auto-starts a topic-scoped session instead of showing the Composer.
+  useEffect(() => {
+    const topicSlug = navPayload?.topicSlug
+    if (!topicSlug || autoStartedRef.current) return
+    autoStartedRef.current = true
+    void start({ scopeKind: 'topic', scopeCode: topicSlug, refine: 'all', count: DEEPLINK_COUNT })
+  }, [navPayload, start])
 
   const complete = useCallback((rec: SessionRecord): void => {
     setRecord(rec)
@@ -87,7 +102,7 @@ export default function Qbank(_props: PageProps): React.JSX.Element {
         <Session
           session={session}
           renderExplanation={(question, answer) => (
-            <Explanation question={question} answer={answer} />
+            <Explanation question={question} answer={answer} navigate={navigate} />
           )}
           onComplete={complete}
         />
