@@ -24,6 +24,13 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'freecat-media', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: false } }
 ])
 
+// Minimal app-document CSP (O4): production only — a static <meta> would break Vite dev
+// HMR (inline scripts + eval + ws). The card iframe carries its own strict CSP regardless.
+const APP_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; font-src 'self' data:; frame-src 'self'; connect-src 'self'; " +
+  "object-src 'none'; base-uri 'self'"
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
@@ -101,6 +108,12 @@ app.whenReady().then(async () => {
   registerFlashcardsIpc(db)
 
   protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
+
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+      cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [APP_CSP] } })
+    })
+  }
 
   createWindow()
   app.on('activate', () => {
