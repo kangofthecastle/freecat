@@ -46,7 +46,17 @@ export function CardViewer({ cardId }: { cardId: number }): React.JSX.Element {
   if (view.renderKind === 'unsupported')
     return <Placeholder title="Unsupported note type" body="This note type isn't supported yet." />
 
-  const srcDoc = buildCardHtml(view, side, MATHJAX_SVG_SRC)
+  // buildCardHtml is total for normal cards, but a pathologically nested field (e.g. ~5k deep
+  // sections/clozes) can overflow the call stack. Catch it here so a malformed card degrades to the
+  // placeholder instead of throwing out of render and crashing the renderer subtree (there is no
+  // error boundary around CardViewer).
+  let srcDoc: string
+  try {
+    srcDoc = buildCardHtml(view, side, MATHJAX_SVG_SRC)
+  } catch (e) {
+    console.error('buildCardHtml failed', e)
+    return <div className="rounded-lg bg-amber-50 p-6 text-amber-800">This card could not be loaded.</div>
+  }
 
   return (
     <div className="flex flex-col gap-3">

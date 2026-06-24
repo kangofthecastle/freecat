@@ -4,6 +4,7 @@ import { deckSets, decks, noteTypes, noteTypeFields, templates, notes, cards, me
 import type { DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardListItem, ServiceResult } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import type { RenderKind } from '../../shared/flashcards/types'
+import { decodeHtmlEntities } from '../../shared/flashcards/render'
 
 export async function listDeckSets(db: DB): Promise<DeckSetSummary[]> {
   const sets = await db.select().from(deckSets)
@@ -43,7 +44,13 @@ export async function listDecks(db: DB, deckSetId: number): Promise<DeckNode[]> 
 }
 
 function preview(sortField: string): string {
-  const text = sortField.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  // Reduce cloze syntax to just the answer ({{c1::mitochondria::hint}} → mitochondria) so the browse
+  // list shows readable text for cloze note types (whose sort field is the raw cloze markup).
+  const text = sortField
+    .replace(/\{\{c\d+::(.*?)(::.*?)?\}\}/g, '$1')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   return text.length > 100 ? `${text.slice(0, 100)}…` : text
 }
 
@@ -108,6 +115,9 @@ const MEDIA_REF_RE = /(?:(?:^|\s)src\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)
 // srcset="a.png 1x, b.png 2x" — captured whole, then split into candidate URLs below.
 const SRCSET_REF_RE = /\bsrcset\s*=\s*["']([^"']+)["']/gi
 
+// HTML-entity-decode the captured attribute value before lookup so it matches the decoded
+// `media.filename` stored at import (e.g. `a&amp;b.png` → `a&b.png`). MUST mirror rewriteMedia's
+// decode so the authorization scan and the iframe rewriter agree on the referenced filename.
 function referencedFilenames(parts: string[]): string[] {
   const hay = parts.join('\n')
   const found = new Set<string>()
@@ -115,7 +125,7 @@ function referencedFilenames(parts: string[]): string[] {
   let m: RegExpExecArray | null
   while ((m = MEDIA_REF_RE.exec(hay)) !== null) {
     const name = m[1] ?? m[2] ?? m[3]
-    if (name) found.add(name.trim())
+    if (name) found.add(decodeHtmlEntities(name.trim()))
   }
   SRCSET_REF_RE.lastIndex = 0
   while ((m = SRCSET_REF_RE.exec(hay)) !== null) {
@@ -126,7 +136,7 @@ function referencedFilenames(parts: string[]): string[] {
       if (!seg) continue
       const sp = seg.indexOf(' ')
       const candidate = (sp === -1 ? seg : seg.slice(0, sp)).trim()
-      if (candidate) found.add(candidate)
+      if (candidate) found.add(decodeHtmlEntities(candidate))
     }
   }
   return [...found]

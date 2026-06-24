@@ -1,12 +1,18 @@
 // test/flashcards/import.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'node:os'; import { join } from 'node:path'; import { randomUUID } from 'node:crypto'
 import { rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
 import { strToU8, zipSync } from 'fflate'
+
+// Mock electron's dialog so importViaDialog is unit-testable in a node environment. showOpenDialog
+// is overridden per-test below.
+const showOpenDialog = vi.fn()
+vi.mock('electron', () => ({ dialog: { showOpenDialog: () => showOpenDialog() } }))
+
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import { buildLegacyApkg, type LegacySpec } from './fixtures/legacy'
-import { importFromFile } from '../../src/main/flashcards/import'
+import { importFromFile, importViaDialog } from '../../src/main/flashcards/import'
 import { cards, media } from '../../src/main/db/schema'
 
 const MAX_PER_MEMBER = 2 * 1024 * 1024 * 1024 // mirror zip.ts cap
@@ -116,5 +122,20 @@ describe('importFromFile (legacy .apkg, end-to-end)', () => {
     if (!res.ok) throw new Error(res.error)
     const rows = await db.select().from(media)
     expect(rows.map((r) => r.filename)).toEqual(['pic.png']) // missing.png dropped
+  })
+})
+
+describe('importViaDialog (envelope around the open dialog)', () => {
+  beforeEach(() => { showOpenDialog.mockReset() })
+
+  it('resolves to err(invalid) when the dialog is canceled (never throws)', async () => {
+    showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
+    await expect(importViaDialog(db, join(dir, 'media'))).resolves.toEqual({ ok: false, error: 'invalid' })
+  })
+
+  it('resolves to err(invalid) when showOpenDialog REJECTS (does not reject to the renderer)', async () => {
+    showOpenDialog.mockRejectedValue(new Error('window destroyed mid-dialog'))
+    // Must resolve to a ServiceResult, not reject — the importDeck channel never throws (design spec).
+    await expect(importViaDialog(db, join(dir, 'media'))).resolves.toEqual({ ok: false, error: 'invalid' })
   })
 })

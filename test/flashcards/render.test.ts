@@ -43,6 +43,11 @@ describe('rewriteMedia', () => {
     expect(rewriteMedia('<img data-src="a.png">', [{ filename: 'a.png', url: 'fm://t/a.png' }]))
       .toBe('<img data-src="a.png">')
   })
+
+  it('HTML-entity-decodes the captured src before lookup (a&amp;b.png matches stored a&b.png)', () => {
+    const out = rewriteMedia('<img src="a&amp;b.png">', [{ filename: 'a&b.png', url: 'fm://t/ab.png' }])
+    expect(out).toBe('<img src="fm://t/ab.png">')
+  })
 })
 
 describe('replaceSound', () => {

@@ -1,6 +1,16 @@
 // src/shared/flashcards/cloze.ts
 
-/** HTML-attribute-encode a string for use inside data-cloze="…". */
+/**
+ * HTML-attribute-encode a string for use inside data-cloze="…".
+ *
+ * data-cloze carries the answer-side rendered HTML so future reveal-all JS can swap a hidden
+ * deletion to its revealed form. Encoding makes `el.getAttribute('data-cloze')` return that HTML
+ * string EXACTLY (one decode, performed by the HTML attribute parser). Consumers MUST therefore
+ * assign it with a SINGLE further decode — i.e. `el.innerHTML = el.getAttribute('data-cloze')` —
+ * and MUST NOT re-decode the value first (e.g. assigning it as textContent, or running their own
+ * entity decode before innerHTML, would leave a stray entity such as `&amp;` visible). See the
+ * "entity round-trip" test in cloze.test.ts which pins this invariant.
+ */
 function encodeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

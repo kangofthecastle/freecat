@@ -47,6 +47,22 @@ describe('flashcards repository', () => {
     expect(p3.nextAfterId).toBeNull()
   })
 
+  it('listCards reduces cloze markup in the preview to the answer text', async () => {
+    const ds = await writeCollection(db, {
+      sourceFilename: 'c.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Cloze', kind: 'cloze', css: '', fields: [{ ord: 0, name: 'Text' }], templates: [{ ord: 0, name: 'Cloze', qfmt: '{{cloze:Text}}', afmt: '{{cloze:Text}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: ['{{c1::mitochondria::organelle}} is the powerhouse'], tags: [], sortField: '{{c1::mitochondria::organelle}} is the powerhouse' }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }]
+      }
+    })
+    const deck = (await listDecks(db, ds.id))[0]
+    if (!deck) throw new Error('no deck')
+    const page = await listCards(db, { deckId: deck.deckId })
+    expect(page.cards[0]?.preview).toBe('mitochondria is the powerhouse') // not the raw {{c1::…}} markup
+  })
+
   it('deleteDeckSet removes the set + all children, and 404s the second time', async () => {
     const ds = await writeCollection(db, { sourceFilename: 'a.apkg', sourceFormat: 'legacy1', parsed: make(2) })
     expect(await deleteDeckSet(db, ds.id)).toEqual({ ok: true, data: null })

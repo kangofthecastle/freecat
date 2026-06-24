@@ -52,4 +52,17 @@ describe('parseModernCollection', () => {
     await writeModernCollection(path, spec) // 2 notes
     await expect(parseModernCollection(path, { maxRows: 1, maxFieldBytes: 1_000_000 })).rejects.toBeInstanceOf(ImportTooLargeError)
   })
+
+  it('enforces the field cap in BYTES, not characters (multibyte field over the byte cap is rejected)', async () => {
+    // 'é' is 1 character but 2 UTF-8 bytes. 5 of them = 5 chars / 10 bytes.
+    await writeModernCollection(path, {
+      ...spec,
+      notes: [{ id: 30, guid: 'g3', mid: 1, flds: ['ééééé', ''], sfld: 'ééééé' }],
+      cards: [{ id: 3, nid: 30, did: 1, ord: 0 }]
+    })
+    // char count (5) is under the cap but byte count (10) is over → must reject on bytes.
+    await expect(parseModernCollection(path, { maxRows: 1000, maxFieldBytes: 8 })).rejects.toBeInstanceOf(ImportTooLargeError)
+    // and a byte cap above the real byte length passes.
+    await expect(parseModernCollection(path, { maxRows: 1000, maxFieldBytes: 64 })).resolves.toBeTruthy()
+  })
 })

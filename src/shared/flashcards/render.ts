@@ -27,12 +27,30 @@ export function preprocessMath(html: string): string {
     .replace(/\[\$\]([\s\S]*?)\[\/\$\]/g, (_m, x: string) => `\\(${x}\\)`)
 }
 
+/**
+ * Decode the HTML entities that can appear inside a media-reference attribute so the captured text
+ * matches the decoded `media.filename` stored at import (e.g. `a&amp;b.png` → `a&b.png`). MUST stay
+ * byte-identical to the decoder used in the repository's `referencedFilenames` scan so the media
+ * authorization scan and this rewriter agree on which filename a card references.
+ */
+export function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&') // last: so a literal &amp;lt; decodes to &lt;, not <
+}
+
 export function rewriteMedia(html: string, mediaMap: CardView['mediaMap']): string {
   if (mediaMap.length === 0) return html
   const byName = new Map(mediaMap.map((m) => [m.filename, m.url]))
   // <img src="…"> — require a whitespace before `src` so `data-src`/`*-src` are left alone.
   let out = html.replace(/(\ssrc\s*=\s*)(["'])([^"']*)\2/gi, (whole, pre: string, q: string, name: string) => {
-    const url = byName.get(name)
+    const url = byName.get(decodeHtmlEntities(name))
     return url ? `${pre}${q}${url}${q}` : whole
   })
   // srcset="a.png 1x, b.png 2x" — rewrite each candidate URL, preserve the descriptors.
@@ -43,14 +61,14 @@ export function rewriteMedia(html: string, mediaMap: CardView['mediaMap']): stri
       const sp = seg.indexOf(' ')
       const candidate = sp === -1 ? seg : seg.slice(0, sp)
       const descriptor = sp === -1 ? '' : seg.slice(sp)
-      const url = byName.get(candidate)
+      const url = byName.get(decodeHtmlEntities(candidate))
       return (url ?? candidate) + descriptor
     }).join(', ')
     return `${pre}${q}${rewritten}${q}`
   })
   // url(…) in card CSS / inline styles (e.g. background:url(bg.png)).
   out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (whole, q: string, name: string) => {
-    const url = byName.get(name.trim())
+    const url = byName.get(decodeHtmlEntities(name.trim()))
     return url ? `url(${q}${url}${q})` : whole
   })
   return out

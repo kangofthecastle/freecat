@@ -63,6 +63,17 @@ describe('CardViewer', () => {
     await screen.findByText(/could not be loaded/i)
   })
 
+  it('degrades to the placeholder (does not crash) when buildCardHtml overflows on a deeply nested field', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    // ~20k nested sections → renderTemplate recurses once per open section → call-stack overflow.
+    const deep = '{{#Front}}'.repeat(20000) + 'x' + '{{/Front}}'.repeat(20000)
+    stubFreecat(async () => ({ ok: true, data: cardView({ qfmt: deep, fields: [{ name: 'Front', value: 'F' }, { name: 'Back', value: 'B' }] }) }))
+    render(<CardViewer cardId={1} />)
+    // The throw is caught in render → existing failed-state placeholder, no iframe, no crash.
+    await screen.findByText(/could not be loaded/i)
+    expect(screen.queryByTitle('card')).toBeNull()
+  })
+
   it('ignores postMessage from a foreign source and clamps height', async () => {
     stubFreecat(async () => ({ ok: true, data: cardView() }))
     render(<CardViewer cardId={1} />)

@@ -107,7 +107,14 @@ export async function importFromFile(db: DB, filePath: string, mediaDir: string)
 
 /** Electron wrapper: open dialog, then import the chosen file. */
 export async function importViaDialog(db: DB, mediaDir: string): Promise<ServiceResult<DeckSetSummary>> {
-  const res = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Anki deck', extensions: ['apkg', 'colpkg'] }] })
+  // showOpenDialog can reject (window destroyed mid-dialog, platform dialog failure); keep it inside
+  // the envelope so importDeck always resolves to a ServiceResult (design spec: never throw to renderer).
+  let res
+  try {
+    res = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Anki deck', extensions: ['apkg', 'colpkg'] }] })
+  } catch {
+    return err('invalid')
+  }
   const filePath = res.filePaths[0]
   if (res.canceled || !filePath) return err('invalid')
   return importFromFile(db, filePath, mediaDir)

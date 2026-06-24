@@ -4,7 +4,7 @@ import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import { writeCollection } from '../../src/main/flashcards/etl'
 import { listDecks } from '../../src/main/repositories/flashcards'
-import { decks, cards, noteTypes } from '../../src/main/db/schema'
+import { decks, cards, noteTypes, notes } from '../../src/main/db/schema'
 import type { ParsedCollection } from '../../src/main/flashcards/parsed-collection'
 
 let db: DB
@@ -39,6 +39,49 @@ describe('writeCollection (ETL)', () => {
     expect(allCards).toHaveLength(3)
     expect(allCards.filter((c) => c.renderKind === 'cloze')).toHaveLength(2)
     expect(allCards.map((c) => c.templateOrd).sort()).toEqual([0, 0, 1])
+  })
+
+  it('drops a note whose noteTypeAnkiId resolves to no inserted note type, keeping the valid notes/cards', async () => {
+    const summary = await writeCollection(db, {
+      sourceFilename: 'orphan.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 100, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [
+          { ankiId: 10, guid: 'good', noteTypeAnkiId: 100, fields: ['ok'], tags: [], sortField: 'ok' },
+          { ankiId: 11, guid: 'orphan', noteTypeAnkiId: 999, fields: ['bad'], tags: [], sortField: 'bad' } // no note type 999
+        ],
+        cards: [
+          { noteAnkiId: 10, deckAnkiId: 1, ord: 0 },
+          { noteAnkiId: 11, deckAnkiId: 1, ord: 0 } // card of the dropped note → must also be dropped
+        ]
+      }
+    })
+    expect(summary.cardCount).toBe(1) // only the valid note's card
+    const allNotes = await db.select().from(notes)
+    expect(allNotes.map((n) => n.ankiGuid)).toEqual(['good']) // orphan note absent
+    const allCards = await db.select().from(cards)
+    expect(allCards).toHaveLength(1)
+    expect(allCards[0]?.noteId).toBe(allNotes[0]?.id)
+  })
+
+  it('drops a dangling card whose noteAnkiId/deckAnkiId does not resolve, excluding it from cardCount', async () => {
+    const summary = await writeCollection(db, {
+      sourceFilename: 'dangle.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 10, guid: 'g', noteTypeAnkiId: 1, fields: ['ok'], tags: [], sortField: 'ok' }],
+        cards: [
+          { noteAnkiId: 10, deckAnkiId: 1, ord: 0 }, // valid
+          { noteAnkiId: 999, deckAnkiId: 1, ord: 0 }, // missing note → dropped
+          { noteAnkiId: 10, deckAnkiId: 888, ord: 0 } // missing deck → dropped
+        ]
+      }
+    })
+    expect(summary.cardCount).toBe(1)
+    const allCards = await db.select().from(cards)
+    expect(allCards).toHaveLength(1) // no orphan card rows written
   })
 
   it('links a three-level deck path (A::B::C) and a sibling branch (A::X) by full joined name', async () => {

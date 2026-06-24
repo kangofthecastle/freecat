@@ -26,7 +26,9 @@ export async function assertCollectionWithinLimits(
     const n = Number((await client.execute(`SELECT COUNT(*) AS n FROM ${table}`)).rows[0]?.n ?? 0)
     if (n > limits.maxRows) throw new ImportTooLargeError(`too many rows in ${table}`)
   }
-  const maxFld = Number((await client.execute('SELECT COALESCE(MAX(LENGTH(flds)), 0) AS n FROM notes')).rows[0]?.n ?? 0)
+  // CAST(flds AS BLOB) makes LENGTH return the UTF-8 byte count, not the character count, so the
+  // cap matches `maxFieldBytes` for multibyte-heavy fields (LENGTH on TEXT counts characters).
+  const maxFld = Number((await client.execute('SELECT COALESCE(MAX(LENGTH(CAST(flds AS BLOB))), 0) AS n FROM notes')).rows[0]?.n ?? 0)
   if (maxFld > limits.maxFieldBytes) throw new ImportTooLargeError('field too large')
 }
 

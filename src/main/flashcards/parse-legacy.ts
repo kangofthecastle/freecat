@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard } from './parsed-collection'
 import { assertCollectionWithinLimits, DEFAULT_LIMITS, type CollectionLimits } from './parse-modern'
+import { ImportTooLargeError } from './zip'
 
 interface RawModel { id: number | string; name: string; type: number; css?: string; flds: { name: string; ord: number }[]; tmpls: { name: string; ord: number; qfmt: string; afmt: string }[] }
 interface RawDeck { id: number | string; name: string }
@@ -13,14 +14,25 @@ export async function parseLegacyCollection(collectionPath: string, limits: Coll
   try {
     // Same amplification guards the modern parser runs (design spec): a legacy collection.anki2 is
     // raw SQLite bounded only by the 2 GiB per-member ZIP cap, so reject row/field bombs before
-    // materializing every notes/cards row (models/decks come from the JSON col blob below).
+    // materializing every notes/cards row. Note types + decks live in the single col.models/col.decks
+    // JSON blobs (not row-per-entity tables), so we bound the blob byte size before JSON.parse and the
+    // entity count after — keeping the legacy path under the same maxFieldBytes/maxRows budget.
     await assertCollectionWithinLimits(client, limits, ['notes', 'cards'])
 
     const colRes = await client.execute('SELECT models, decks FROM col LIMIT 1')
     const col = colRes.rows[0]
     if (!col) throw new Error('empty col table')
-    const models = JSON.parse(String(col.models)) as Record<string, RawModel>
-    const decksRaw = JSON.parse(String(col.decks)) as Record<string, RawDeck>
+    const modelsJson = String(col.models)
+    const decksJson = String(col.decks)
+    const byteLen = (s: string): number => new TextEncoder().encode(s).length
+    if (byteLen(modelsJson) > limits.maxFieldBytes || byteLen(decksJson) > limits.maxFieldBytes) {
+      throw new ImportTooLargeError('models/decks blob too large')
+    }
+    const models = JSON.parse(modelsJson) as Record<string, RawModel>
+    const decksRaw = JSON.parse(decksJson) as Record<string, RawDeck>
+    if (Object.keys(models).length > limits.maxRows || Object.keys(decksRaw).length > limits.maxRows) {
+      throw new ImportTooLargeError('too many note types/decks')
+    }
 
     const noteTypes: ParsedNoteType[] = Object.values(models).map((m) => ({
       ankiId: Number(m.id),

@@ -68,7 +68,7 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
       <section className="w-80 shrink-0 overflow-auto border-r border-gray-200">
         {selectedDeckId === null
           ? <p className="p-4 text-sm text-gray-400">Select a deck to see its cards.</p>
-          : <CardList deckId={selectedDeckId} selectedCardId={selectedCardId} onSelect={setSelectedCardId} />}
+          : <CardList key={selectedDeckId} deckId={selectedDeckId} selectedCardId={selectedCardId} onSelect={setSelectedCardId} />}
       </section>
 
       <main className="flex-1 overflow-auto p-4">

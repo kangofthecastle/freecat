@@ -63,6 +63,28 @@ describe('Flashcards page', () => {
     await waitFor(() => expect(iframe.getAttribute('srcdoc') ?? '').toContain('HELLOQ'))
   })
 
+  it('does not show the previous deck\'s cards after switching decks (CardList remounts on deck change)', async () => {
+    // Two sibling decks, each with a distinct card preview.
+    const twoDecks: DeckNode[] = [
+      { deckId: 10, name: 'A', leafName: 'A', cardCount: 1, children: [] },
+      { deckId: 20, name: 'B', leafName: 'B', cardCount: 1, children: [] }
+    ]
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => twoDecks,
+      listCards: async ({ deckId }) => deckId === 10
+        ? { cards: [{ cardId: 1, renderKind: 'basic', preview: 'ALPHA-CARD' }], nextAfterId: null }
+        : { cards: [{ cardId: 2, renderKind: 'basic', preview: 'BETA-CARD' }], nextAfterId: null }
+    })
+    render(<Flashcards />)
+    fireEvent.click(await screen.findByText(/^A$/))
+    await screen.findByText('ALPHA-CARD')
+    // Switch to deck B: the remount means deck A's card is never present in deck B's painted list.
+    fireEvent.click(screen.getByText(/^B$/))
+    await screen.findByText('BETA-CARD')
+    expect(screen.queryByText('ALPHA-CARD')).toBeNull()
+  })
+
   it('refreshes the deck list after a successful import', async () => {
     let sets: DeckSetSummary[] = []
     stub({

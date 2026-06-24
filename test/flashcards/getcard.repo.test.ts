@@ -132,6 +132,61 @@ describe('getCard', () => {
     expect(byTemplate.get('Reverse')).toEqual({ qfmt: '{{Back}}', afmt: '{{Front}}' })
   })
 
+  it('cross-note-type: two multi-template note types with differing fields each resolve to their own css/fields/template', async () => {
+    // Two distinct note types, EACH with multiple templates and different field lists, exercises the
+    // anki-id-keyed map for note types (and guid-keyed for notes) across more than one note type.
+    await writeCollection(db, {
+      sourceFilename: 'multi.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [
+          {
+            ankiId: 1, name: 'Reversible', kind: 'standard', css: '.reversible{}',
+            fields: [{ ord: 0, name: 'Front' }, { ord: 1, name: 'Back' }],
+            templates: [
+              { ord: 0, name: 'Forward', qfmt: '{{Front}}', afmt: '{{Back}}' },
+              { ord: 1, name: 'Reverse', qfmt: '{{Back}}', afmt: '{{Front}}' }
+            ]
+          },
+          {
+            ankiId: 2, name: 'ThreeField', kind: 'standard', css: '.threefield{}',
+            fields: [{ ord: 0, name: 'A' }, { ord: 1, name: 'B' }, { ord: 2, name: 'C' }],
+            templates: [
+              { ord: 0, name: 'T0', qfmt: '{{A}}', afmt: '{{B}}' },
+              { ord: 1, name: 'T1', qfmt: '{{B}}', afmt: '{{C}}' }
+            ]
+          }
+        ],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [
+          { ankiId: 100, guid: 'g-rev', noteTypeAnkiId: 1, fields: ['rF', 'rB'], tags: [], sortField: 'rF' },
+          { ankiId: 200, guid: 'g-three', noteTypeAnkiId: 2, fields: ['aV', 'bV', 'cV'], tags: [], sortField: 'aV' }
+        ],
+        cards: [
+          { noteAnkiId: 100, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 100, deckAnkiId: 1, ord: 1 },
+          { noteAnkiId: 200, deckAnkiId: 1, ord: 0 }, { noteAnkiId: 200, deckAnkiId: 1, ord: 1 }
+        ]
+      }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const page = await listCards(db, { deckId: deck.deckId })
+    const byTemplate = new Map<string, { css: string; noteTypeName: string; qfmt: string; afmt: string; fields: string[] }>()
+    for (const c of page.cards) {
+      const res = await getCard(db, c.cardId)
+      if (res.ok) byTemplate.set(res.data.templateName, {
+        css: res.data.css, noteTypeName: res.data.noteTypeName, qfmt: res.data.qfmt, afmt: res.data.afmt,
+        fields: res.data.fields.map((f) => f.name)
+      })
+    }
+    // Reversible note type → its own css, field list, and per-ord template.
+    expect(byTemplate.get('Forward')).toEqual({ css: '.reversible{}', noteTypeName: 'Reversible', qfmt: '{{Front}}', afmt: '{{Back}}', fields: ['Front', 'Back'] })
+    expect(byTemplate.get('Reverse')).toEqual({ css: '.reversible{}', noteTypeName: 'Reversible', qfmt: '{{Back}}', afmt: '{{Front}}', fields: ['Front', 'Back'] })
+    // ThreeField note type → its own (different) css, 3 fields, and per-ord template — proving the
+    // cross-note-type mapping did not bind these rows to the other note type.
+    expect(byTemplate.get('T0')).toEqual({ css: '.threefield{}', noteTypeName: 'ThreeField', qfmt: '{{A}}', afmt: '{{B}}', fields: ['A', 'B', 'C'] })
+    expect(byTemplate.get('T1')).toEqual({ css: '.threefield{}', noteTypeName: 'ThreeField', qfmt: '{{B}}', afmt: '{{C}}', fields: ['A', 'B', 'C'] })
+  })
+
   it('does not attach media for a data-src reference (aligned with rewriteMedia, which leaves data-src alone)', async () => {
     await writeCollection(db, {
       sourceFilename: 'ds.apkg', sourceFormat: 'legacy1',
@@ -150,6 +205,26 @@ describe('getCard', () => {
     const res = await getCard(db, c.cardId)
     if (!res.ok) throw new Error('expected ok')
     expect(res.data.media).toEqual([]) // data-src is not a real src ref → not authorized
+  })
+
+  it('authorizes a media reference whose src uses an HTML entity (a&amp;b.png → stored a&b.png)', async () => {
+    await writeCollection(db, {
+      sourceFilename: 'amp.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: ['<img src="a&amp;b.png">'], tags: [], sortField: 'x' }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }]
+      },
+      media: { 'a&b.png': { hash: 'ab0', ext: '.png' } } // decoded filename as stored on disk
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const c = (await listCards(db, { deckId: deck.deckId })).cards[0]
+    if (!c) throw new Error('no card')
+    const res = await getCard(db, c.cardId)
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.data.media).toEqual([{ filename: 'a&b.png', hash: 'ab0', ext: '.png' }])
   })
 
   it('extracts media referenced via CSS url() and srcset', async () => {
