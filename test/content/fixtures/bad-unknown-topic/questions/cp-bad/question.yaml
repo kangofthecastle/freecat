@@ -1,0 +1,12 @@
+id: cp-bad-unknown-topic
+topic: physics.does-not-exist
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'A question whose topic is not in the taxonomy.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'The topic slug does not resolve to any seeded topic.'

@@ -1,0 +1,19 @@
+id: cp-0001-kinematics
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: |
+  A ball is thrown straight up at 20 m/s. ![diagram](figure-1.png)
+  Ignoring air resistance, what is its speed at the top of its flight?
+choices:
+  - '0 m/s'
+  - '10 m/s'
+  - '20 m/s'
+  - '40 m/s'
+correct: A
+explanation: |
+  At the apex of vertical projectile motion the instantaneous velocity is
+  zero before the ball reverses direction.
+choiceExplanations:
+  B: 'Half the launch speed has no physical basis here.'
+  C: 'The launch speed is not retained at the apex.'
