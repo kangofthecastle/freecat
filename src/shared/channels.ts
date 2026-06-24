@@ -10,5 +10,12 @@ export const CH = {
   gamSetActivePet: 'gamification:setActivePet',
   gamEquipItem: 'gamification:equipItem',
   gamUnequipItem: 'gamification:unequipItem',
-  gamRenamePet: 'gamification:renamePet'
+  gamRenamePet: 'gamification:renamePet',
+  taxonomyList: 'taxonomy:list',
+  qbankGetComposerData: 'qbank:getComposerData',
+  qbankStartSession: 'qbank:startSession',
+  qbankSubmitAnswer: 'qbank:submitAnswer',
+  qbankCompleteSession: 'qbank:completeSession',
+  qbankToggleFlag: 'qbank:toggleFlag',
+  qbankGetDashboard: 'qbank:getDashboard'
 } as const

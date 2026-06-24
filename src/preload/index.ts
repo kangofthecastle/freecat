@@ -18,6 +18,17 @@ const api: FreecatApi = {
     equipItem: (petId, itemKey) => ipcRenderer.invoke(CH.gamEquipItem, { petId, itemKey }),
     unequipItem: (petId, itemKey) => ipcRenderer.invoke(CH.gamUnequipItem, { petId, itemKey }),
     renamePet: (petId, name) => ipcRenderer.invoke(CH.gamRenamePet, { petId, name })
+  },
+  taxonomy: {
+    list: () => ipcRenderer.invoke(CH.taxonomyList)
+  },
+  qbank: {
+    getComposerData: () => ipcRenderer.invoke(CH.qbankGetComposerData),
+    startSession: (input) => ipcRenderer.invoke(CH.qbankStartSession, input),
+    submitAnswer: (input) => ipcRenderer.invoke(CH.qbankSubmitAnswer, input),
+    completeSession: (sessionId) => ipcRenderer.invoke(CH.qbankCompleteSession, sessionId),
+    toggleFlag: (questionId) => ipcRenderer.invoke(CH.qbankToggleFlag, questionId),
+    getDashboard: () => ipcRenderer.invoke(CH.qbankGetDashboard)
   }
 }
 contextBridge.exposeInMainWorld('freecat', api)
