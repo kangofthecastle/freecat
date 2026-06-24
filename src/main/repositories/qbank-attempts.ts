@@ -7,9 +7,9 @@ export interface RecordAttemptParams {
   sessionId: number
   questionId: string
   passageId: string | null
-  section: string
-  contentCategory: string | null
-  skill: string | null
+  topic: string // denormalized primary topic slug
+  discipline: string // denormalized discipline key
+  section: string // derived MCAT section
   chosen: ChoiceLetter
   isCorrect: boolean
   timeMs?: number | null
@@ -21,9 +21,9 @@ export async function recordAttempt(db: DB, p: RecordAttemptParams): Promise<Qba
     sessionId: p.sessionId,
     questionId: p.questionId,
     passageId: p.passageId,
+    topic: p.topic,
+    discipline: p.discipline,
     section: p.section,
-    contentCategory: p.contentCategory,
-    skill: p.skill,
     chosen: p.chosen,
     isCorrect: p.isCorrect,
     timeMs: p.timeMs ?? null,
