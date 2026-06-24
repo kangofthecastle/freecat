@@ -5,8 +5,8 @@ import type { ChoiceLetter } from '../../../shared/dto'
 export const qbankSession = sqliteTable('qbank_session', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   mode: text('mode').notNull().default('tutor'), // 'tutor' | 'timed' (future)
-  scopeKind: text('scope_kind').notNull(), // 'mixed' | 'section' | 'content_category' | 'skill'
-  scopeCode: text('scope_code'), // taxonomy code when scoped, else null
+  scopeKind: text('scope_kind').notNull(), // 'mixed' | 'discipline' | 'topic'
+  scopeCode: text('scope_code'), // topic slug or discipline key when scoped, else null
   refine: text('refine').notNull().default('all'), // 'all' | 'incorrect' | 'flagged'
   requestedCount: integer('requested_count').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
@@ -19,9 +19,9 @@ export const qbankAttempt = sqliteTable('qbank_attempt', {
   sessionId: integer('session_id').notNull().references(() => qbankSession.id),
   questionId: text('question_id').notNull(),
   passageId: text('passage_id'), // null for standalone
+  topic: text('topic').notNull(), // denormalized primary topic slug
+  discipline: text('discipline').notNull(), // denormalized discipline key
   section: text('section').notNull(), // denormalized for SQL analytics
-  contentCategory: text('content_category'), // null for CARS
-  skill: text('skill'), // null for science
   chosen: text('chosen').$type<ChoiceLetter>().notNull(), // 'A'..'D'
   isCorrect: integer('is_correct', { mode: 'boolean' }).notNull(),
   timeMs: integer('time_ms'),
@@ -30,7 +30,8 @@ export const qbankAttempt = sqliteTable('qbank_attempt', {
   index('qbank_attempt_session_idx').on(t.sessionId),
   index('qbank_attempt_question_idx').on(t.questionId),
   index('qbank_attempt_section_idx').on(t.section),
-  index('qbank_attempt_content_category_idx').on(t.contentCategory)
+  index('qbank_attempt_topic_idx').on(t.topic),
+  index('qbank_attempt_discipline_idx').on(t.discipline)
 ])
 
 // A per-question flag toggle (one row per flagged question).

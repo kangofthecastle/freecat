@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
-import { load } from 'js-yaml'
-import { ZodError } from 'zod'
+import { load as loadYaml } from 'js-yaml'
+import { ZodError, type ZodType } from 'zod'
 import type { ContentIndex, PassageContent, QuestionContent, SectionCode } from './types'
 import type { ChoiceLetter } from '../../shared/dto'
 import {
@@ -11,6 +11,64 @@ import {
   type PassageQuestionInput
 } from './schema'
 import { rewriteImagePaths } from './images'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lessons: main's generic, schema-agnostic content loader (shared pipeline v0).
+// Kept verbatim — the LessonStore depends on these. (Add/add merge: BOTH loaders.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ContentRecord<T> {
+  dir: string
+  data: T
+}
+
+export interface LoadOptions<T> {
+  root: string
+  subdir: string
+  envelopeFile: string
+  schema: ZodType<T>
+}
+
+/** Generic, schema-agnostic loader for bundled authored content (shared pipeline v0). */
+export function loadContentType<T>(opts: LoadOptions<T>): ContentRecord<T>[] {
+  const base = join(opts.root, opts.subdir)
+  if (!existsSync(base)) return []
+  const out: ContentRecord<T>[] = []
+  for (const dir of itemDirs(base, opts.envelopeFile)) {
+    const file = join(dir, opts.envelopeFile)
+    try {
+      const data = opts.schema.parse(loadYaml(readFileSync(file, 'utf8')))
+      out.push({ dir, data })
+    } catch (e) {
+      throw new Error(`Failed to load content envelope: ${file}`, { cause: e })
+    }
+  }
+  return out
+}
+
+export function readBody(dir: string, file: string): string {
+  return readFileSync(join(dir, file), 'utf8')
+}
+
+/** Directories (sorted) under base that directly contain envelopeFile. */
+function itemDirs(base: string, envelopeFile: string): string[] {
+  const result: string[] = []
+  const stack: string[] = [base]
+  while (stack.length > 0) {
+    const cur = stack.pop()
+    if (cur === undefined) continue
+    const entries = readdirSync(cur, { withFileTypes: true })
+    if (entries.some((e) => e.isFile() && e.name === envelopeFile)) result.push(cur)
+    for (const e of entries) if (e.isDirectory()) stack.push(join(cur, e.name))
+  }
+  return result.sort()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Questions: Qbank's bespoke scanner + index builders.
+// NOTE: this half is reworked in Phase 3 (topic axis). It is kept as-merged for
+// Task 0 and is expected to have type errors against the new contracts (red OK).
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ContentError {
   file: string
@@ -113,7 +171,7 @@ function checkProseImages(acc: EmptyAccum, file: string, itemDir: string, prose:
 function loadStandalone(acc: EmptyAccum, root: string, file: string, folderSection: string, opts: LoaderOptions): void {
   let raw: unknown
   try {
-    raw = load(readFileSync(file, 'utf8'))
+    raw = loadYaml(readFileSync(file, 'utf8'))
   } catch (e) {
     acc.errors.push({ file, message: `YAML parse error: ${(e as Error).message}` })
     return
@@ -151,7 +209,7 @@ function loadStandalone(acc: EmptyAccum, root: string, file: string, folderSecti
 function loadPassage(acc: EmptyAccum, root: string, file: string, folderSection: string, opts: LoaderOptions): void {
   let raw: unknown
   try {
-    raw = load(readFileSync(file, 'utf8'))
+    raw = loadYaml(readFileSync(file, 'utf8'))
   } catch (e) {
     acc.errors.push({ file, message: `YAML parse error: ${(e as Error).message}` })
     return

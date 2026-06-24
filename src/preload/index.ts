@@ -19,16 +19,24 @@ const api: FreecatApi = {
     unequipItem: (petId, itemKey) => ipcRenderer.invoke(CH.gamUnequipItem, { petId, itemKey }),
     renamePet: (petId, name) => ipcRenderer.invoke(CH.gamRenamePet, { petId, name })
   },
+  contentReview: {
+    getOutline: () => ipcRenderer.invoke(CH.contentGetOutline),
+    getLesson: (slug) => ipcRenderer.invoke(CH.contentGetLesson, slug),
+    markViewed: (slug) => ipcRenderer.invoke(CH.contentMarkViewed, slug),
+    markComplete: (slug, completed) => ipcRenderer.invoke(CH.contentMarkComplete, { slug, completed }),
+    lessonForTaxonomy: (ref) => ipcRenderer.invoke(CH.contentLessonForTaxonomy, ref)
+  },
   taxonomy: {
-    list: () => ipcRenderer.invoke(CH.taxonomyList)
+    list: () => ipcRenderer.invoke(CH.taxonomyList),
+    tags: () => ipcRenderer.invoke(CH.taxonomyTags)
   },
   qbank: {
-    getComposerData: () => ipcRenderer.invoke(CH.qbankGetComposerData),
     startSession: (input) => ipcRenderer.invoke(CH.qbankStartSession, input),
     submitAnswer: (input) => ipcRenderer.invoke(CH.qbankSubmitAnswer, input),
     completeSession: (sessionId) => ipcRenderer.invoke(CH.qbankCompleteSession, sessionId),
     toggleFlag: (questionId) => ipcRenderer.invoke(CH.qbankToggleFlag, questionId),
-    getDashboard: () => ipcRenderer.invoke(CH.qbankGetDashboard)
+    dashboard: () => ipcRenderer.invoke(CH.qbankDashboard),
+    questionsForTaxonomy: (topicSlug) => ipcRenderer.invoke(CH.qbankQuestionsForTaxonomy, topicSlug)
   }
 }
 contextBridge.exposeInMainWorld('freecat', api)

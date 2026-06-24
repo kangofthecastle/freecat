@@ -11,11 +11,17 @@ export const CH = {
   gamEquipItem: 'gamification:equipItem',
   gamUnequipItem: 'gamification:unequipItem',
   gamRenamePet: 'gamification:renamePet',
+  contentGetOutline: 'content:getOutline',
+  contentGetLesson: 'content:getLesson',
+  contentMarkViewed: 'content:markViewed',
+  contentMarkComplete: 'content:markComplete',
+  contentLessonForTaxonomy: 'content:lessonForTaxonomy',
   taxonomyList: 'taxonomy:list',
-  qbankGetComposerData: 'qbank:getComposerData',
+  taxonomyTags: 'taxonomy:tags',
   qbankStartSession: 'qbank:startSession',
   qbankSubmitAnswer: 'qbank:submitAnswer',
   qbankCompleteSession: 'qbank:completeSession',
   qbankToggleFlag: 'qbank:toggleFlag',
-  qbankGetDashboard: 'qbank:getDashboard'
+  qbankDashboard: 'qbank:dashboard',
+  qbankQuestionsForTaxonomy: 'qbank:questionsForTaxonomy'
 } as const

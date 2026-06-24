@@ -27,31 +27,78 @@ export interface GamificationState {
 export interface ActivityResult { streak: number; daily: DailyProgress; eggBecameReady: boolean; goalJustMet: boolean }
 export interface RecordActivityInput { kind: string; count?: number; taxonomyRef?: string }
 
-// ── Qbank + taxonomy DTOs (renderer-facing; no answer key leaves the main process) ──
-export type ChoiceLetter = 'A' | 'B' | 'C' | 'D'
-export type ScopeKind = 'mixed' | 'section' | 'content_category' | 'skill'
-export type Refine = 'all' | 'incorrect' | 'flagged'
+// --- Content Review ---
+export type DisciplineKey = 'gen-chem' | 'o-chem' | 'physics' | 'biology' | 'biochem' | 'behavioral-sci'
+export type LessonStatus = 'not-started' | 'in-progress' | 'completed'
 
-export interface TaxonomyNodeDto {
-  id: string
-  kind: 'section' | 'foundational_concept' | 'content_category' | 'skill' | 'topic'
-  code: string
+export interface LessonSummary {
+  slug: string
   title: string
-  parentId: string | null
+  discipline: DisciplineKey
+  summary?: string
+  aamcCategories: string[]
+  status: LessonStatus
+  available: boolean // false = topic exists in the taxonomy but no lesson is authored yet
 }
+export interface OutlineGroup {
+  discipline: DisciplineKey
+  title: string
+  completed: number
+  total: number // counts authored (available) lessons only
+  lessons: LessonSummary[]
+}
+export interface Outline {
+  groups: OutlineGroup[]
+  completed: number
+  total: number
+}
+export interface LessonDetail {
+  slug: string
+  title: string
+  discipline: DisciplineKey
+  aamcCategories: string[]
+  html: string
+  status: LessonStatus
+}
+export interface LessonRef {
+  slug: string
+  title: string
+  discipline: DisciplineKey
+}
+export interface MarkCompleteResult {
+  status: LessonStatus
+  activity?: ActivityResult
+}
+
+// ── Shared taxonomy scope tree (served to the Qbank renderer) ──
+/** MCAT test section, derived from a discipline (no CARS). */
+export type SectionCode = 'chem-phys' | 'bio-biochem' | 'psych-soc'
+/** A multi-vocabulary content tag, e.g. { vocab: 'aamc', code: '1A' }. */
+export interface Tag { vocab: string; code: string }
+/** A tag-vocabulary entry (a `Tag` plus its human title), served to populate filters. */
+export interface TagVocabEntry { vocab: string; code: string; title: string }
+export interface TopicDto { slug: string; title: string; aamcCodes: string[] }
+export interface DisciplineTreeDto { discipline: DisciplineKey; title: string; topics: TopicDto[] }
+
+// ── Qbank DTOs (renderer-facing; no answer key leaves the main process) ──
+export type ChoiceLetter = 'A' | 'B' | 'C' | 'D'
+export type ScopeKind = 'mixed' | 'discipline' | 'topic'
+export type Refine = 'all' | 'incorrect' | 'flagged'
 
 export interface PresentedQuestion {
   id: string
-  section: string
-  contentCategory: string | null
-  skill: string | null
+  topic: string // NEW — primary topic slug; drives the outbound cross-link
+  section: SectionCode // derived (kept for display)
   passageId: string | null
   stem: string
-  choices: string[] // always length 4
+  choices: [string, string, string, string]
   /** Whether this question is currently flagged (persisted across sessions). Never an answer-key field. */
   flagged: boolean
+  // NOTE: no answer key; no `skill`; no `contentCategory`
 }
 export interface PresentedPassage { id: string; passage: string }
+/** A lightweight question reference for cross-links (CR "Practice this topic"). */
+export interface QuestionRef { id: string; topic: string }
 
 export interface StartSessionInput {
   scopeKind: ScopeKind
@@ -85,13 +132,16 @@ export interface SubmitAnswerResult extends AnswerResult {
 export interface SessionSummaryRow { questionId: string; chosen: ChoiceLetter; isCorrect: boolean }
 export interface SessionSummary { sessionId: number; total: number; correct: number; rows: SessionSummaryRow[] }
 
-export interface SectionAccuracy { section: string; answered: number; correct: number }
-export interface CategoryAccuracy { contentCategory: string; answered: number; correct: number }
+// ── Dashboard accuracy DTOs (by discipline/topic via SQL; by AAMC via JS over the content index) ──
+export interface TopicAccuracy { topic: string; title: string; discipline: DisciplineKey; answered: number; correct: number }
+export interface DisciplineAccuracy { discipline: DisciplineKey; title: string; answered: number; correct: number }
+export interface AamcAccuracy { code: string; title: string; answered: number; correct: number }
 export interface DashboardStats {
-  overall: { answered: number; correct: number }
-  bySection: SectionAccuracy[]
-  byContentCategory: CategoryAccuracy[]
-  flaggedCount: number
-  incorrectCount: number
+  totalAnswered: number
+  totalCorrect: number
+  byDiscipline: DisciplineAccuracy[]
+  byTopic: TopicAccuracy[]
+  byAamc: AamcAccuracy[] // computed in JS over the content index
+  latestIncorrectQuestionIds: string[]
 }
 export interface ComposerData { totalQuestions: number; incorrectCount: number; flaggedCount: number }

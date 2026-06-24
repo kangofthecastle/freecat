@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1fd5452e-0dc5-4157-ba7f-5e7e542b22a5",
+  "id": "791b352c-3058-44a5-a336-e151846ae6d5",
   "prevId": "8c97075c-ac07-4dcf-a195-05f2128d3456",
   "tables": {
     "coin_ledger": {
@@ -397,10 +397,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": true
         },
         "kind": {
           "name": "kind",
@@ -409,8 +409,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "code": {
-          "name": "code",
+        "slug": {
+          "name": "slug",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -425,13 +425,151 @@
         },
         "parent_id": {
           "name": "parent_id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "taxonomy_node_slug_unique": {
+          "name": "taxonomy_node_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "taxonomy_node_parent_id_taxonomy_node_id_fk": {
+          "name": "taxonomy_node_parent_id_taxonomy_node_id_fk",
+          "tableFrom": "taxonomy_node",
+          "tableTo": "taxonomy_node",
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "topic_aamc_category": {
+      "name": "topic_aamc_category",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "topic_id": {
+          "name": "topic_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aamc_code": {
+          "name": "aamc_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "topic_aamc_uq": {
+          "name": "topic_aamc_uq",
+          "columns": [
+            "topic_id",
+            "aamc_code"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "topic_aamc_category_topic_id_taxonomy_node_id_fk": {
+          "name": "topic_aamc_category_topic_id_taxonomy_node_id_fk",
+          "tableFrom": "topic_aamc_category",
+          "tableTo": "taxonomy_node",
+          "columnsFrom": [
+            "topic_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "lesson_progress": {
+      "name": "lesson_progress",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "lesson_slug": {
+          "name": "lesson_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_viewed_at": {
+          "name": "last_viewed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "counted_for_reward": {
+          "name": "counted_for_reward",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "lesson_progress_lesson_slug_unique": {
+          "name": "lesson_progress_lesson_slug_unique",
+          "columns": [
+            "lesson_slug"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

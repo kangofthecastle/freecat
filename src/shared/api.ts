@@ -1,7 +1,8 @@
 import type {
   ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView,
-  TaxonomyNodeDto, ComposerData, StartSessionInput, StartSessionResult,
-  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats
+  Outline, LessonDetail, LessonRef, MarkCompleteResult,
+  DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
+  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats, QuestionRef
 } from './dto'
 
 export interface FreecatApi {
@@ -18,15 +19,23 @@ export interface FreecatApi {
     unequipItem: (petId: number, itemKey: string) => Promise<ServiceResult<null>>
     renamePet: (petId: number, name: string) => Promise<ServiceResult<null>>
   }
+  contentReview: {
+    getOutline: () => Promise<Outline>
+    getLesson: (slug: string) => Promise<LessonDetail | null>
+    markViewed: (slug: string) => Promise<void>
+    markComplete: (slug: string, completed: boolean) => Promise<ServiceResult<MarkCompleteResult>>
+    lessonForTaxonomy: (ref: string) => Promise<LessonRef | null>
+  }
   taxonomy: {
-    list: () => Promise<TaxonomyNodeDto[]>
+    list: () => Promise<DisciplineTreeDto[]>
+    tags: () => Promise<TagVocabEntry[]>
   }
   qbank: {
-    getComposerData: () => Promise<ComposerData>
     startSession: (input: StartSessionInput) => Promise<StartSessionResult>
-    submitAnswer: (input: SubmitAnswerInput) => Promise<ServiceResult<SubmitAnswerResult>>
+    submitAnswer: (input: SubmitAnswerInput) => Promise<SubmitAnswerResult>
     completeSession: (sessionId: number) => Promise<SessionSummary>
-    toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>
-    getDashboard: () => Promise<DashboardStats>
+    toggleFlag: (questionId: string) => Promise<{ flagged: boolean }>
+    dashboard: () => Promise<DashboardStats>
+    questionsForTaxonomy: (topicSlug: string) => Promise<QuestionRef[]>
   }
 }

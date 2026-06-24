@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f542616c-17b4-4a5c-96fd-feed9f55227a",
-  "prevId": "1fd5452e-0dc5-4157-ba7f-5e7e542b22a5",
+  "id": "a06bab77-d5c7-4ca7-9b84-3ffc1230adca",
+  "prevId": "791b352c-3058-44a5-a336-e151846ae6d5",
   "tables": {
     "coin_ledger": {
       "name": "coin_ledger",
@@ -397,10 +397,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": true
         },
         "kind": {
           "name": "kind",
@@ -409,8 +409,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "code": {
-          "name": "code",
+        "slug": {
+          "name": "slug",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -425,13 +425,97 @@
         },
         "parent_id": {
           "name": "parent_id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "taxonomy_node_slug_unique": {
+          "name": "taxonomy_node_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "taxonomy_node_parent_id_taxonomy_node_id_fk": {
+          "name": "taxonomy_node_parent_id_taxonomy_node_id_fk",
+          "tableFrom": "taxonomy_node",
+          "tableTo": "taxonomy_node",
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "lesson_progress": {
+      "name": "lesson_progress",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "lesson_slug": {
+          "name": "lesson_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_viewed_at": {
+          "name": "last_viewed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "counted_for_reward": {
+          "name": "counted_for_reward",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "lesson_progress_lesson_slug_unique": {
+          "name": "lesson_progress_lesson_slug_unique",
+          "columns": [
+            "lesson_slug"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -468,25 +552,25 @@
           "notNull": false,
           "autoincrement": false
         },
-        "section": {
-          "name": "section",
+        "topic": {
+          "name": "topic",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "content_category": {
-          "name": "content_category",
+        "discipline": {
+          "name": "discipline",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
-        "skill": {
-          "name": "skill",
+        "section": {
+          "name": "section",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "chosen": {
@@ -540,10 +624,17 @@
           ],
           "isUnique": false
         },
-        "qbank_attempt_content_category_idx": {
-          "name": "qbank_attempt_content_category_idx",
+        "qbank_attempt_topic_idx": {
+          "name": "qbank_attempt_topic_idx",
           "columns": [
-            "content_category"
+            "topic"
+          ],
+          "isUnique": false
+        },
+        "qbank_attempt_discipline_idx": {
+          "name": "qbank_attempt_discipline_idx",
+          "columns": [
+            "discipline"
           ],
           "isUnique": false
         }

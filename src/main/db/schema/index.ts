@@ -1,4 +1,5 @@
 export * from './profile'
 export * from './gamification'
 export * from './taxonomy'
+export * from './lesson-progress'
 export * from './qbank'

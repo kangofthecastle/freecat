@@ -4,7 +4,9 @@
   "private": true,
   "description": "Open-source local-first MCAT study app",
   "main": "./out/main/index.js",
-  "engines": { "node": ">=20.19.0" },
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -17,7 +19,7 @@
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "drizzle-orm": "^0.45.2",
-    "js-yaml": "^5.0.0",
+    "js-yaml": "^4.2.0",
     "katex": "^0.16.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { sql } from 'drizzle-orm'
+import { type DB } from '../../src/main/db/client'
+import { createTestDb } from '../helpers/db'
 import { standaloneQuestionSchema, passageSchema } from '../../src/main/content/schema'
 
 const goodQuestion = {
@@ -153,5 +156,24 @@ describe('passageSchema', () => {
       questions: [{ ...goodPassage.questions[0], choices: ['a', 'b', 'c'] }]
     }
     expect(() => passageSchema.parse(bad)).toThrow()
+  })
+})
+
+let db: DB
+beforeEach(async () => {
+  db = await createTestDb()
+})
+
+describe('content-review schema', () => {
+  it('creates the taxonomy + lesson-progress tables', async () => {
+    const rows = await db.all<{ name: string }>(
+      sql`select name from sqlite_master where type='table' order by name`
+    )
+    const names = rows.map((r) => r.name)
+    // topic_aamc_category is retired (spec §4); the bridge table no longer exists.
+    for (const t of ['taxonomy_node', 'lesson_progress']) {
+      expect(names).toContain(t)
+    }
+    expect(names).not.toContain('topic_aamc_category')
   })
 })

@@ -2,12 +2,15 @@ import { app, BrowserWindow, dialog, protocol } from 'electron'
 import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
-import { seedTaxonomy } from './db/seed-taxonomy'
 import { registerProfileIpc } from './ipc/profile'
 import { registerGamificationIpc } from './ipc/gamification'
+import { registerContentReviewIpc } from './ipc/content-review'
 import { registerTaxonomyIpc } from './ipc/taxonomy'
 import { registerQbankIpc } from './ipc/qbank'
 import { ensureStarterGrant } from './repositories/activity'
+import { seedTaxonomy } from './repositories/taxonomy'
+import { createLessonStore } from './content/lessons'
+import { contentRoot } from './content/root'
 import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
 import { loadContent, type LoaderOptions } from './content/loader'
 import type { ContentIndex } from './content/types'
@@ -46,11 +49,6 @@ function migrationsFolder(): string {
   return app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
 }
 
-// Authored content: the repo's content/ in dev; bundled under resourcesPath in prod.
-function contentRootDir(): string {
-  return app.isPackaged ? join(process.resourcesPath, 'content') : join(app.getAppPath(), 'content')
-}
-
 function emptyIndex(): ContentIndex {
   return {
     byId: new Map(),
@@ -64,14 +62,14 @@ function emptyIndex(): ContentIndex {
 
 // Build the in-memory question index from disk. An empty/missing tree yields an empty
 // index; any load failure degrades to an empty index (0 questions) rather than crashing boot.
-function buildContentIndex(contentRoot: string): ContentIndex {
+function buildContentIndex(root: string): ContentIndex {
   const opts: LoaderOptions = {
     sectionByCode: buildSectionByCode(),
     contentCategoryCodes: contentCategoryCodes(),
     skillCodes: skillCodes()
   }
   try {
-    return loadContent(contentRoot, opts)
+    return loadContent(root, opts)
   } catch (e) {
     console.error('[content] failed to load content tree; starting with an empty index:', e)
     return emptyIndex()
@@ -85,12 +83,14 @@ app.whenReady().then(async () => {
   await seedTaxonomy(db)
   await ensureStarterGrant(db)
 
-  const contentRoot = contentRootDir()
-  registerContentProtocol(contentRoot)
-  const index = buildContentIndex(contentRoot)
+  const root = contentRoot()
+  registerContentProtocol(root)
+  const lessonStore = createLessonStore(root)
+  const index = buildContentIndex(root)
 
   registerProfileIpc(db)
   registerGamificationIpc(db)
+  registerContentReviewIpc(db, lessonStore)
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index)
 

@@ -1,15 +1,14 @@
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, integer, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
-// Foundation-owned: the MCAT taxonomy tree (AAMC content outline).
+// Shared backbone established by Content Review (charter §5.2): disciplines + topics
+// as a 2-level tree. Qbank consumes this table and does NOT create its own.
 export const taxonomyNode = sqliteTable('taxonomy_node', {
-  // Stable string id, e.g. "section:chem-phys", "fc:4", "cc:4A", "skill:cars-comprehension", "topic:doppler-effect"
-  id: text('id').primaryKey(),
-  kind: text('kind', {
-    enum: ['section', 'foundational_concept', 'content_category', 'skill', 'topic']
-  }).notNull(),
-  code: text('code').notNull(),
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind', { enum: ['discipline', 'topic'] }).notNull(),
+  slug: text('slug').notNull().unique(),
   title: text('title').notNull(),
-  parentId: text('parent_id')
+  parentId: integer('parent_id').references((): AnySQLiteColumn => taxonomyNode.id),
+  sortOrder: integer('sort_order').notNull().default(0)
 })
 
 export type TaxonomyNode = typeof taxonomyNode.$inferSelect
