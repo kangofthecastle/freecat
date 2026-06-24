@@ -20,7 +20,7 @@ function stripHtml(s: string): string {
 
 /** Anki emptiness: no non-whitespace content after removing HTML tags and &nbsp;. */
 function isEmptyField(value: string): boolean {
-  return stripHtml(value).replace(/&nbsp;/gi, ' ').replace(/ /g, ' ').trim().length === 0
+  return stripHtml(value).replace(/&nbsp;/gi, ' ').replace(/ /g, ' ').trim().length === 0
 }
 
 function resolveValue(name: string, ctx: TemplateContext): string | undefined {
