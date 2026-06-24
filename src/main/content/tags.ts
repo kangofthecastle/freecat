@@ -1,11 +1,7 @@
-import type { Tag } from '../../shared/dto'
+import type { Tag, TagVocabEntry } from '../../shared/dto'
 import { AAMC_CONTENT_CATEGORIES } from '../db/seed/taxonomy-data'
 
-export interface TagVocabEntry {
-  vocab: string
-  code: string
-  title: string
-}
+export type { TagVocabEntry }
 
 export const CONTENT_TAG_VOCAB: readonly TagVocabEntry[] = AAMC_CONTENT_CATEGORIES.map(
   (c) => ({ vocab: 'aamc', code: c.code, title: c.title })

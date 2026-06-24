@@ -24,11 +24,11 @@ describe('qbank-sessions repository', () => {
 
   it('createSession honors an explicit mode and scopeCode', async () => {
     const s = await createSession(db, {
-      mode: 'timed', scopeKind: 'section', scopeCode: 'chem-phys', refine: 'incorrect', requestedCount: 5, now: NOW
+      mode: 'timed', scopeKind: 'discipline', scopeCode: 'biochem', refine: 'incorrect', requestedCount: 5, now: NOW
     })
     expect(s.mode).toBe('timed')
-    expect(s.scopeKind).toBe('section')
-    expect(s.scopeCode).toBe('chem-phys')
+    expect(s.scopeKind).toBe('discipline')
+    expect(s.scopeCode).toBe('biochem')
     expect(s.refine).toBe('incorrect')
   })
 

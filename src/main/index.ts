@@ -12,9 +12,8 @@ import { seedTaxonomy } from './repositories/taxonomy'
 import { createLessonStore } from './content/lessons'
 import { contentRoot } from './content/root'
 import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
-import { loadContent, type LoaderOptions } from './content/loader'
+import { scanContent } from './content/loader'
 import type { ContentIndex } from './content/types'
-import { buildSectionByCode, contentCategoryCodes, skillCodes } from './content/taxonomy-codes'
 
 // The content protocol must be privileged BEFORE app 'ready' (Electron requirement).
 protocol.registerSchemesAsPrivileged([
@@ -53,23 +52,25 @@ function emptyIndex(): ContentIndex {
   return {
     byId: new Map(),
     passagesById: new Map(),
-    bySection: new Map(),
-    byContentCategory: new Map(),
-    bySkill: new Map(),
-    allQuestionIds: []
+    byTopic: new Map(),
+    byDiscipline: new Map(),
+    byTag: new Map(),
+    allQuestionIds: [],
+    errors: []
   }
 }
 
 // Build the in-memory question index from disk. An empty/missing tree yields an empty
-// index; any load failure degrades to an empty index (0 questions) rather than crashing boot.
+// index. `scanContent` never throws — it collects per-item errors — so a malformed item
+// degrades that item (logged) rather than crashing boot; a hard failure also degrades to empty.
 function buildContentIndex(root: string): ContentIndex {
-  const opts: LoaderOptions = {
-    sectionByCode: buildSectionByCode(),
-    contentCategoryCodes: contentCategoryCodes(),
-    skillCodes: skillCodes()
-  }
   try {
-    return loadContent(root, opts)
+    const index = scanContent(root)
+    if (index.errors.length > 0) {
+      console.error(`[content] ${index.errors.length} content error(s); affected items were skipped:`)
+      for (const e of index.errors) console.error(`  ${e.file}: ${e.message}`)
+    }
+    return index
   } catch (e) {
     console.error('[content] failed to load content tree; starting with an empty index:', e)
     return emptyIndex()
