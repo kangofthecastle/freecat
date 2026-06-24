@@ -1,14 +1,26 @@
 import { z } from 'zod'
 import { loadContentType, readBody } from './loader'
 
+// Optional per-section tags. When present, getLesson aggregates the section
+// aamc tags into LessonDetail.aamcCategories; otherwise it falls back to the
+// lesson topic's aamcCodes (so section-less seeds render their footer unchanged).
+const lessonSectionSchema = z.object({
+  title: z.string().min(1),
+  anchor: z.string().min(1),
+  tags: z.array(z.object({ vocab: z.string().min(1), code: z.string().min(1) })).default([])
+})
+
 export const lessonSchema = z.object({
   slug: z.string().min(1),
   title: z.string().min(1),
   summary: z.string().optional(),
   order: z.number().int().optional(),
-  bodyFile: z.string().optional()
+  bodyFile: z.string().optional(),
+  sections: z.array(lessonSectionSchema).optional()
 })
 export type LessonEnvelope = z.infer<typeof lessonSchema>
+// Parsed (output) section shape: `tags` is always an array (the .default([]) has run).
+export type LessonSection = z.output<typeof lessonSectionSchema>
 
 export interface LessonRecord {
   slug: string
@@ -16,17 +28,28 @@ export interface LessonRecord {
   summary?: string
   dir: string
   bodyFile: string
+  sections?: LessonSection[]
 }
 export interface LoadedLesson {
   slug: string
   title: string
   summary?: string
   html: string
+  sections?: LessonSection[]
 }
 
 export function loadLessons(root: string): LessonRecord[] {
   return loadContentType({ root, subdir: 'lessons', envelopeFile: 'lesson.yaml', schema: lessonSchema }).map(
-    ({ dir, data }) => ({ slug: data.slug, title: data.title, summary: data.summary, dir, bodyFile: data.bodyFile ?? 'body.html' })
+    ({ dir, data }) => ({
+      slug: data.slug,
+      title: data.title,
+      summary: data.summary,
+      dir,
+      bodyFile: data.bodyFile ?? 'body.html',
+      // .parse() has already applied the per-section tags default; map to the
+      // output section shape so `tags` is a concrete array (not input-optional).
+      sections: data.sections?.map((s) => ({ title: s.title, anchor: s.anchor, tags: s.tags ?? [] }))
+    })
   )
 }
 
@@ -58,7 +81,7 @@ export class LessonStore {
       html = readBody(r.dir, r.bodyFile)
       this.bodyCache.set(slug, html)
     }
-    return { slug: r.slug, title: r.title, summary: r.summary, html }
+    return { slug: r.slug, title: r.title, summary: r.summary, html, sections: r.sections }
   }
 }
 

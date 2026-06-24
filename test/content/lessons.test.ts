@@ -11,6 +11,27 @@ describe('lessonSchema', () => {
   it('rejects a missing title', () => {
     expect(() => lessonSchema.parse({ slug: 'a.b' })).toThrow()
   })
+  it('parses optional sections with title/anchor/tags', () => {
+    const env = lessonSchema.parse({
+      slug: 'a.b',
+      title: 'T',
+      sections: [
+        { title: 'Intro', anchor: 'intro', tags: [{ vocab: 'aamc', code: '1A' }] },
+        { title: 'Details', anchor: 'details' }
+      ]
+    })
+    expect(env.sections).toHaveLength(2)
+    const [first, second] = env.sections ?? []
+    expect(first?.title).toBe('Intro')
+    expect(first?.anchor).toBe('intro')
+    expect(first?.tags).toEqual([{ vocab: 'aamc', code: '1A' }])
+    expect(second?.tags).toEqual([]) // tags default to []
+  })
+  it('rejects a section missing its anchor', () => {
+    expect(() =>
+      lessonSchema.parse({ slug: 'a.b', title: 'T', sections: [{ title: 'Intro' }] })
+    ).toThrow()
+  })
 })
 
 describe('LessonStore', () => {
