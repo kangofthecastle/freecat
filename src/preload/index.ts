@@ -43,6 +43,7 @@ const api: FreecatApi = {
     listDeckSets: () => ipcRenderer.invoke(CH.fcListDeckSets),
     listDecks: (deckSetId) => ipcRenderer.invoke(CH.fcListDecks, deckSetId),
     listCards: (input) => ipcRenderer.invoke(CH.fcListCards, input),
+    getCard: (cardId) => ipcRenderer.invoke(CH.fcGetCard, cardId),
     deleteDeckSet: (deckSetId) => ipcRenderer.invoke(CH.fcDeleteDeckSet, deckSetId)
 }
 contextBridge.exposeInMainWorld('freecat', api)

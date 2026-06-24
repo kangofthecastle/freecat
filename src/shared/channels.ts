@@ -28,5 +28,6 @@ export const CH = {
   fcListDeckSets:  'flashcards:listDeckSets',
   fcListDecks:     'flashcards:listDecks',
   fcListCards:     'flashcards:listCards',
+  fcGetCard:       'flashcards:getCard',
   fcDeleteDeckSet: 'flashcards:deleteDeckSet'
 } as const

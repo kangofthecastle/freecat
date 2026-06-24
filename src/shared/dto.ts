@@ -156,3 +156,20 @@ export interface DeckNode { deckId: number; name: string; leafName: string; card
 export interface ListCardsInput { deckId: number; afterId?: number; limit?: number }
 export interface CardListItem { cardId: number; renderKind: RenderKind; preview: string }
 export interface CardListPage { cards: CardListItem[]; nextAfterId: number | null }
+export interface CardField { name: string; value: string }
+export interface CardMedia { filename: string; url: string }
+export interface CardView {
+  cardId: number
+  renderKind: RenderKind
+  css: string
+  qfmt: string
+  afmt: string
+  fields: CardField[]
+  tags: string[]
+  noteTypeName: string
+  deckName: string
+  subdeckName: string
+  templateName: string
+  clozeOrdinal: number | null
+  mediaMap: CardMedia[]
+}
