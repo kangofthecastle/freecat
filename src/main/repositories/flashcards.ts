@@ -98,6 +98,8 @@ export interface CardSource {
 
 // Filenames referenced from card content: <img src="…">, [sound:…], and CSS url(…).
 const MEDIA_REF_RE = /(?:\bsrc\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)\])|(?:url\(\s*["']?([^"')]+)["']?\s*\))/gi
+// srcset="a.png 1x, b.png 2x" — captured whole, then split into candidate URLs below.
+const SRCSET_REF_RE = /\bsrcset\s*=\s*["']([^"']+)["']/gi
 
 function referencedFilenames(parts: string[]): string[] {
   const hay = parts.join('\n')
@@ -107,6 +109,18 @@ function referencedFilenames(parts: string[]): string[] {
   while ((m = MEDIA_REF_RE.exec(hay)) !== null) {
     const name = m[1] ?? m[2] ?? m[3]
     if (name) found.add(name.trim())
+  }
+  SRCSET_REF_RE.lastIndex = 0
+  while ((m = SRCSET_REF_RE.exec(hay)) !== null) {
+    const list = m[1]
+    if (!list) continue
+    for (const part of list.split(',')) {
+      const seg = part.trim()
+      if (!seg) continue
+      const sp = seg.indexOf(' ')
+      const candidate = (sp === -1 ? seg : seg.slice(0, sp)).trim()
+      if (candidate) found.add(candidate)
+    }
   }
   return [...found]
 }

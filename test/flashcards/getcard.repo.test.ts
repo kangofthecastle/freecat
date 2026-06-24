@@ -100,4 +100,24 @@ describe('getCard', () => {
     if (!res.ok) throw new Error('expected ok')
     expect(res.data.media).toEqual([])
   })
+
+  it('extracts media referenced via CSS url() and srcset', async () => {
+    await writeCollection(db, {
+      sourceFilename: 'b.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '.card{background:url(bg.png)}', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: ['<img srcset="hi.png 2x">'], tags: [], sortField: 'x' }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }]
+      },
+      media: { 'bg.png': { hash: 'b0', ext: '.png' }, 'hi.png': { hash: 'b1', ext: '.png' } }
+    })
+    const deck = (await listDecks(db, 1))[0]
+    if (!deck) throw new Error('no deck')
+    const c = (await listCards(db, { deckId: deck.deckId })).cards[0]
+    if (!c) throw new Error('no card')
+    const res = await getCard(db, c.cardId)
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.data.media.map((m) => m.filename).sort()).toEqual(['bg.png', 'hi.png'])
+  })
 })

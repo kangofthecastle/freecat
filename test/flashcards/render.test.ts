@@ -25,6 +25,24 @@ describe('rewriteMedia', () => {
     const out = rewriteMedia(html, [{ filename: 'a.png', url: 'freecat-media://tok/a.png' }])
     expect(out).toBe('<img src="freecat-media://tok/a.png"><img src="b.png">')
   })
+
+  it('rewrites srcset candidates, preserving descriptors', () => {
+    const out = rewriteMedia('<img srcset="a.png 1x, b.png 2x">', [
+      { filename: 'a.png', url: 'fm://t/a.png' },
+      { filename: 'b.png', url: 'fm://t/b.png' }
+    ])
+    expect(out).toBe('<img srcset="fm://t/a.png 1x, fm://t/b.png 2x">')
+  })
+
+  it('rewrites CSS url() references', () => {
+    expect(rewriteMedia('body{background:url(bg.png)}', [{ filename: 'bg.png', url: 'fm://t/bg.png' }]))
+      .toBe('body{background:url(fm://t/bg.png)}')
+  })
+
+  it('does not rewrite data-src — only the real src attribute', () => {
+    expect(rewriteMedia('<img data-src="a.png">', [{ filename: 'a.png', url: 'fm://t/a.png' }]))
+      .toBe('<img data-src="a.png">')
+  })
 })
 
 describe('replaceSound', () => {
@@ -53,6 +71,11 @@ describe('buildCardHtml', () => {
   it('rewrites media via the mediaMap', () => {
     const html = buildCardHtml(view({ fields: [{ name: 'Front', value: '<img src="p.png">' }, { name: 'Back', value: '' }], mediaMap: [{ filename: 'p.png', url: 'freecat-media://tok/p.png' }] }), 'question')
     expect(html).toContain('src="freecat-media://tok/p.png"')
+  })
+
+  it('rewrites media url() inside the card CSS', () => {
+    const html = buildCardHtml(view({ css: '.fc-card{background:url(bg.png)}', mediaMap: [{ filename: 'bg.png', url: 'freecat-media://tok/bg.png' }] }), 'question')
+    expect(html).toContain('<style>.fc-card{background:url(freecat-media://tok/bg.png)}</style>')
   })
 
   it('inlines MathJax only when math is present AND a source is supplied', () => {
