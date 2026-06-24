@@ -85,6 +85,8 @@ export async function planSession(
   // 2. group eligible ids into units (standalone = 1 question; a passage question pulls
   //    its whole passage's ordered questionIds — siblings included even if not eligible —
   //    deduped by passage). Units preserve first-seen order of the eligible list.
+  //    Passage atomicity: passage siblings ride along even if filtered out by scope/tag/refine,
+  //    so a passage is always presented whole once any one of its questions is eligible.
   const units: string[][] = []
   const seenPassage = new Set<string>()
   const seenStandalone = new Set<string>()

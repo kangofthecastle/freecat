@@ -22,10 +22,11 @@ function q(id: string, topic: string, discipline: string, section: string, tags:
 }
 
 /** Content index whose `byId` carries the AAMC tags the dashboard aggregates over.
- *  cp-2 carries TWO AAMC tags (4A + 4B) — exercises the intended double-count. */
+ *  cp-2 carries TWO AAMC tags (4A + 4B) — exercises the intended double-count.
+ *  cp-1 also carries a non-AAMC tag (kaplan:K1) — exercises the `vocab !== 'aamc'` guard. */
 function makeIndex(): ContentIndex {
   const byId = new Map<string, QuestionContent>([
-    ['cp-1', q('cp-1', 'physics.mechanics', 'physics', 'chem-phys', [{ vocab: 'aamc', code: '4A' }])],
+    ['cp-1', q('cp-1', 'physics.mechanics', 'physics', 'chem-phys', [{ vocab: 'aamc', code: '4A' }, { vocab: 'kaplan', code: 'K1' }])],
     ['cp-2', q('cp-2', 'physics.mechanics', 'physics', 'chem-phys', [{ vocab: 'aamc', code: '4A' }, { vocab: 'aamc', code: '4B' }])],
     ['cp-3', q('cp-3', 'physics.fluids', 'physics', 'chem-phys', [{ vocab: 'aamc', code: '4B' }])],
     ['bb-1', q('bb-1', 'biochem.enzymes', 'biochem', 'bio-biochem', [{ vocab: 'aamc', code: '1A' }])]
@@ -100,7 +101,11 @@ describe('qbank-analytics repository', () => {
     // 1A: bb-1 (correct) → answered 1, correct 1
     expect(a1A).toEqual({ code: '1A', title: 'Structure and function of proteins and their constituent amino acids', answered: 1, correct: 1 })
     expect(d.byAamc).toHaveLength(3)
-    // documented double-count: the four attempts' tag occurrences sum to 5 (cp-2 counted twice)
+    // non-AAMC vocab guard: cp-1's kaplan:K1 tag is NOT bucketed (only vocab 'aamc' counts).
+    expect(d.byAamc.find((r) => r.code === 'K1')).toBeUndefined()
+    expect(d.byAamc.some((r) => r.title === 'kaplan:K1')).toBe(false)
+    // documented double-count: the four attempts' tag occurrences sum to 5 (cp-2 counted twice,
+    // and cp-1's kaplan tag excluded — otherwise this would be 6).
     expect(d.byAamc.reduce((n, r) => n + r.answered, 0)).toBe(5)
 
     // latestIncorrectQuestionIds unchanged: only cp-2 was last-wrong
