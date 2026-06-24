@@ -5,9 +5,9 @@ import type {
   SubmitAnswerInput, SubmitAnswerResult, SessionSummary, SessionSummaryRow,
   ChoiceLetter, ServiceResult
 } from '../../shared/dto'
-import { err } from '../../shared/dto'
+import { ok, err } from '../../shared/dto'
 import { createSession } from '../repositories/qbank-sessions'
-import { latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
+import { recordAttempt, latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
 import { listFlaggedIds } from '../repositories/qbank-flags'
 import { recordActivity } from '../repositories/activity'
 
@@ -123,13 +123,49 @@ export async function planSession(
 }
 
 export async function gradeAndRecord(
-  _index: ContentIndex,
-  _db: DB,
-  _input: SubmitAnswerInput,
-  _opts: GradeOptions
+  index: ContentIndex,
+  db: DB,
+  input: SubmitAnswerInput,
+  opts: GradeOptions
 ): Promise<ServiceResult<SubmitAnswerResult>> {
-  // Implemented in Task 16.
-  return err('not-found')
+  const q = index.byId.get(input.questionId)
+  if (!q) return err('not-found')
+
+  const isCorrect = q.correct === input.choice
+  await recordAttempt(db, {
+    sessionId: input.sessionId,
+    questionId: q.id,
+    passageId: q.passageId,
+    section: q.section,
+    contentCategory: q.contentCategory,
+    skill: q.skill,
+    chosen: input.choice,
+    isCorrect,
+    timeMs: input.timeMs ?? null,
+    now: opts.now
+  })
+
+  // Gamification is a side-effect, in its own transaction — never block or fail grading on it.
+  let activity: SubmitAnswerResult['activity'] = null
+  const record = opts.recordActivityFn ?? recordActivity
+  try {
+    const res = await record(db, {
+      kind: 'qbank.answer',
+      taxonomyRef: q.contentCategory ?? q.skill ?? undefined,
+      now: opts.now
+    })
+    if (res.ok) activity = res.data
+  } catch {
+    activity = null
+  }
+
+  return ok({
+    correct: isCorrect,
+    correctChoice: q.correct,
+    explanation: q.explanation,
+    choiceExplanations: q.choiceExplanations,
+    activity
+  })
 }
 
 export async function summarize(db: DB, sessionId: number): Promise<SessionSummary> {
