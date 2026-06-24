@@ -15,14 +15,27 @@ const ROUTES = {
 
 export type RouteKey = keyof typeof ROUTES
 
-/** Pages may opt into navigation (e.g. Home → Nest) by accepting this prop. */
+/** Optional deep-link target carried across a module switch (cross-links). */
+export interface NavPayload {
+  lessonSlug?: string
+  topicSlug?: string
+}
+
+/** Pages may opt into navigation by accepting these props. */
 export interface PageProps {
-  navigate?: (key: RouteKey) => void
+  navigate?: (key: RouteKey, payload?: NavPayload) => void
+  navPayload?: NavPayload
 }
 
 export default function App(): React.JSX.Element {
   const [route, setRoute] = useState<RouteKey>('home')
+  const [payload, setPayload] = useState<NavPayload | undefined>(undefined)
   const Active = ROUTES[route].component
+
+  const navigate = (key: RouteKey, p?: NavPayload): void => {
+    setRoute(key)
+    setPayload(p)
+  }
 
   return (
     <div className="flex h-screen">
@@ -31,7 +44,7 @@ export default function App(): React.JSX.Element {
         {(Object.keys(ROUTES) as RouteKey[]).map((key) => (
           <button
             key={key}
-            onClick={() => setRoute(key)}
+            onClick={() => navigate(key)}
             aria-current={route === key ? 'page' : undefined}
             className={`block w-full text-left px-3 py-2 rounded ${
               route === key ? 'bg-blue-600 text-white' : 'hover:bg-gray-200'
@@ -42,7 +55,7 @@ export default function App(): React.JSX.Element {
         ))}
       </nav>
       <main className="flex-1 overflow-auto">
-        <Active navigate={setRoute} />
+        <Active navigate={navigate} navPayload={payload} />
       </main>
     </div>
   )
