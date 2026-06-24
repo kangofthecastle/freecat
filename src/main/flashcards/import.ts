@@ -7,48 +7,19 @@ import { dialog } from 'electron'
 import type { DB } from '../db/client'
 import type { DeckSetSummary, ServiceResult } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
+import type { ParsedCollection } from './parsed-collection'
 import { readCentralDirectory } from './central-dir'
 import { detectFormat } from './detect'
 import { extractMembers, ImportTooLargeError, CorruptPackageError } from './zip'
 import { parseLegacyCollection } from './parse-legacy'
+import { parseModernCollection } from './parse-modern'
+import { parseModernMedia } from './modern-media'
+import { zstdDecompressCapped, MAX_ZSTD_COLLECTION } from './zstd'
 import { storeMedia } from './media-store'
 import { writeCollection } from './etl'
 
-/** Import a deck package from a path into the db, persisting media under mediaDir. No dialog (unit-testable). */
-export async function importFromFile(db: DB, filePath: string, mediaDir: string): Promise<ServiceResult<DeckSetSummary>> {
-  let buf: Uint8Array
-  try { buf = await readFile(filePath) } catch { return err('corrupt-package') }
-
-  let entries
-  try { entries = readCentralDirectory(buf) } catch { return err('corrupt-package') }
-  const detected = detectFormat(entries)
-  if (!detected) return err('unsupported-format')
-  if (detected.format === 'latest') return err('unsupported-format') // modern .colpkg → Plan 3
-
-  let members: Record<string, Uint8Array>
-  try {
-    members = extractMembers(buf, (n) => n === detected.collectionMember || n === 'media' || /^[0-9]+$/.test(n))
-  } catch (e) {
-    if (e instanceof ImportTooLargeError) return err('import-too-large')
-    if (e instanceof CorruptPackageError) return err('corrupt-package')
-    return err('corrupt-package')
-  }
-  const collectionBytes = members[detected.collectionMember]
-  if (!collectionBytes) return err('corrupt-package')
-
-  // Parse from a temp file (raw libsql needs a path); always clean it up.
-  const tmpPath = join(tmpdir(), `fc-import-${randomUUID()}.anki2`)
-  let parsed
-  try {
-    await writeFile(tmpPath, collectionBytes)
-    parsed = await parseLegacyCollection(tmpPath)
-  } catch {
-    return err('corrupt-package')
-  } finally {
-    await unlink(tmpPath).catch(() => { /* ignore */ })
-  }
-
-  // Resolve numbered blobs → original filenames via the `media` JSON map, then store on disk.
+/** Legacy media: a JSON map of numbered-blob → original filename. */
+function legacyMedia(members: Record<string, Uint8Array>): Record<string, Uint8Array> {
   const mediaFiles: Record<string, Uint8Array> = {}
   const mediaJson = members['media']
   if (mediaJson) {
@@ -59,6 +30,62 @@ export async function importFromFile(db: DB, filePath: string, mediaDir: string)
         if (blob) mediaFiles[name] = blob
       }
     } catch { /* malformed media map → import without media rather than fail the whole deck */ }
+  }
+  return mediaFiles
+}
+
+/** Import a deck package from a path into the db, persisting media under mediaDir. No dialog (unit-testable). */
+export async function importFromFile(db: DB, filePath: string, mediaDir: string): Promise<ServiceResult<DeckSetSummary>> {
+  let buf: Uint8Array
+  try { buf = await readFile(filePath) } catch { return err('corrupt-package') }
+
+  let entries
+  try { entries = readCentralDirectory(buf) } catch { return err('corrupt-package') }
+  const detected = detectFormat(entries)
+  if (!detected) return err('unsupported-format')
+  const isModern = detected.format === 'latest'
+
+  let members: Record<string, Uint8Array>
+  try {
+    members = extractMembers(buf, (n) => n === detected.collectionMember || n === 'media' || /^[0-9]+$/.test(n))
+  } catch (e) {
+    if (e instanceof ImportTooLargeError) return err('import-too-large')
+    if (e instanceof CorruptPackageError) return err('corrupt-package')
+    return err('corrupt-package')
+  }
+
+  const rawCollection = members[detected.collectionMember]
+  if (!rawCollection) return err('corrupt-package')
+
+  // Modern collections are a single zstd stream over the SQLite file; legacy are raw SQLite.
+  let collectionBytes: Uint8Array
+  try {
+    collectionBytes = isModern ? zstdDecompressCapped(rawCollection, MAX_ZSTD_COLLECTION) : rawCollection
+  } catch (e) {
+    if (e instanceof ImportTooLargeError) return err('import-too-large')
+    return err('corrupt-package')
+  }
+
+  // Parse from a temp file (raw libsql needs a path); always clean it up.
+  const tmpPath = join(tmpdir(), `fc-import-${randomUUID()}.anki2`)
+  let parsed: ParsedCollection
+  try {
+    await writeFile(tmpPath, collectionBytes)
+    parsed = isModern ? await parseModernCollection(tmpPath) : await parseLegacyCollection(tmpPath)
+  } catch (e) {
+    if (e instanceof ImportTooLargeError) return err('import-too-large')
+    return err('corrupt-package')
+  } finally {
+    await unlink(tmpPath).catch(() => { /* ignore */ })
+  }
+
+  // Resolve media (modern: protobuf manifest + raw blobs; legacy: JSON map), then store on disk.
+  let mediaFiles: Record<string, Uint8Array>
+  try {
+    mediaFiles = isModern ? parseModernMedia(members) : legacyMedia(members)
+  } catch (e) {
+    if (e instanceof ImportTooLargeError) return err('import-too-large')
+    mediaFiles = {} // a bad media manifest should not fail the whole deck
   }
   const stored = storeMedia(mediaDir, mediaFiles)
 
