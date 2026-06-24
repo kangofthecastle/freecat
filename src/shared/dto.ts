@@ -1,8 +1,11 @@
 import type { MoodState, Rarity, Item, CoinReason } from './gamification/types'
+import type { RenderKind } from './flashcards/types'
 
 export type ServiceErrorCode =
   | 'not-found' | 'invalid' | 'insufficient-coins' | 'egg-exists'
   | 'no-pet' | 'already-owned' | 'not-owned' | 'not-ready' | 'name-too-long'
+  | 'deck-not-found' | 'card-not-found' | 'deck-set-not-found'
+  | 'unsupported-format' | 'corrupt-package' | 'import-too-large'
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; error: ServiceErrorCode }
 export const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data })
 export const err = <T = never>(error: ServiceErrorCode): ServiceResult<T> => ({ ok: false, error })
@@ -146,3 +149,10 @@ export interface DashboardStats {
   byAamc: AamcAccuracy[] // computed in JS over the content index
   latestIncorrectQuestionIds: string[]
 }
+
+// --- Flashcards DTOs ---
+export interface DeckSetSummary { id: number; sourceFilename: string; deckCount: number; cardCount: number; importedAt: Date }
+export interface DeckNode { deckId: number; name: string; leafName: string; cardCount: number; children: DeckNode[] }
+export interface ListCardsInput { deckId: number; afterId?: number; limit?: number }
+export interface CardListItem { cardId: number; renderKind: RenderKind; preview: string }
+export interface CardListPage { cards: CardListItem[]; nextAfterId: number | null }
