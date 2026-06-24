@@ -1,31 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  ComposerData,
-  Refine,
-  ScopeKind,
-  StartSessionInput,
-  TaxonomyNodeDto
-} from '../../../shared/dto'
-import { buildTaxonomyTree, type TaxonomyTree } from './taxonomy-tree'
+import type { Refine, StartSessionInput, Tag, TagVocabEntry } from '../../../shared/dto'
+import { buildScopeTree, parseScopeValue, scopeValue, type Scope, type ScopeTree } from './scope-tree'
 
-/** A pre-selected scope, e.g. when the dashboard taps through into a content category. */
-export interface InitialScope {
-  scopeKind: ScopeKind
-  scopeCode?: string
-}
+/** A pre-selected scope, e.g. when the dashboard taps through into a topic. */
+export type InitialScope = Scope
 
 const LENGTHS = [5, 10, 20] as const
 
-/** Encode a scope choice as a single radio value so the picker stays one flat list. */
-function scopeValue(kind: ScopeKind, code?: string): string {
-  return code ? `${kind}:${code}` : kind
-}
-
-function parseScopeValue(value: string): { scopeKind: ScopeKind; scopeCode?: string } {
-  const idx = value.indexOf(':')
-  if (idx === -1) return { scopeKind: value as ScopeKind }
-  return { scopeKind: value.slice(0, idx) as ScopeKind, scopeCode: value.slice(idx + 1) }
-}
+const REFINE_OPTIONS: { value: Refine; label: string }[] = [
+  { value: 'all', label: 'All questions' },
+  { value: 'incorrect', label: 'Previously incorrect' },
+  { value: 'flagged', label: 'Flagged' }
+]
 
 export function Composer({
   initialScope,
@@ -35,22 +21,24 @@ export function Composer({
   /** May be async (it calls startSession); the Composer disables Start while it is pending. */
   onStart: (input: StartSessionInput) => void | Promise<void>
 }): React.JSX.Element {
-  const [tree, setTree] = useState<TaxonomyTree | null>(null)
-  const [counts, setCounts] = useState<ComposerData | null>(null)
+  const [tree, setTree] = useState<ScopeTree | null>(null)
+  const [tags, setTags] = useState<TagVocabEntry[]>([])
   const [loadFailed, setLoadFailed] = useState(false)
   const [starting, setStarting] = useState(false)
 
-  const [scope, setScope] = useState<string>(scopeValue(initialScope?.scopeKind ?? 'mixed', initialScope?.scopeCode))
+  const [scope, setScope] = useState<string>(scopeValue(initialScope ?? { scopeKind: 'mixed' }))
   const [refine, setRefine] = useState<Refine>('all')
   const [count, setCount] = useState<number>(10)
+  /** Selected AAMC tag keys (`${vocab}:${code}`); ANDs with scope when non-empty. */
+  const [selectedTagKeys, setSelectedTagKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let alive = true
-    Promise.all([window.freecat.taxonomy.list(), window.freecat.qbank.getComposerData()])
-      .then(([nodes, data]: [TaxonomyNodeDto[], ComposerData]) => {
+    Promise.all([window.freecat.taxonomy.list(), window.freecat.taxonomy.tags()])
+      .then(([disciplines, vocab]) => {
         if (!alive) return
-        setTree(buildTaxonomyTree(nodes))
-        setCounts(data)
+        setTree(buildScopeTree(disciplines))
+        setTags(vocab)
         setLoadFailed(false)
       })
       .catch((e) => {
@@ -62,31 +50,36 @@ export function Composer({
     }
   }, [])
 
-  // If a pre-scope arrives after first render, honor it.
+  // If a pre-scope arrives after first render (dashboard tap-through), honor it.
   useEffect(() => {
-    if (initialScope) setScope(scopeValue(initialScope.scopeKind, initialScope.scopeCode))
+    if (initialScope) setScope(scopeValue(initialScope))
   }, [initialScope])
+
+  const toggleTag = (key: string): void => {
+    setSelectedTagKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const tagFilter = useMemo<Tag[]>(
+    () => tags.filter((t) => selectedTagKeys.has(`${t.vocab}:${t.code}`)).map((t) => ({ vocab: t.vocab, code: t.code })),
+    [tags, selectedTagKeys]
+  )
 
   const start = async (): Promise<void> => {
     if (starting) return
-    const { scopeKind, scopeCode } = parseScopeValue(scope)
+    const parsed: Scope = parseScopeValue(scope)
     setStarting(true)
     try {
-      await onStart({ scopeKind, scopeCode, refine, count })
+      await onStart({ ...parsed, refine, count, tagFilter })
     } finally {
       // If onStart navigated away this component is unmounting; the setState is a harmless no-op.
       setStarting(false)
     }
   }
-
-  const refineOptions = useMemo(
-    (): { value: Refine; label: string }[] => [
-      { value: 'all', label: 'All questions' },
-      { value: 'incorrect', label: `Incorrect (${counts?.incorrectCount ?? 0})` },
-      { value: 'flagged', label: `Flagged (${counts?.flaggedCount ?? 0})` }
-    ],
-    [counts]
-  )
 
   if (loadFailed) {
     return (
@@ -103,9 +96,7 @@ export function Composer({
     <div className="mx-auto max-w-2xl space-y-6 p-8">
       <header>
         <h2 className="text-3xl font-bold text-gray-800">New practice session</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          {counts ? `${counts.totalQuestions} questions in the bank` : 'Loading…'}
-        </p>
+        <p className="mt-1 text-sm text-gray-500">Choose a scope, then start.</p>
       </header>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
@@ -113,58 +104,87 @@ export function Composer({
         <div className="space-y-3">
           <ScopeRadio
             name="scope"
-            value="mixed"
+            value={scopeValue({ scopeKind: 'mixed' })}
             current={scope}
             onChange={setScope}
-            label="Mixed — all sections"
+            label="Mixed — all disciplines"
+            strong
           />
-          {tree?.sections.map((section) => {
-            const ccs = tree.contentCategoriesBySection.get(section.code) ?? []
-            const skills = section.code === 'cars' ? tree.carsSkills : []
-            return (
-              <div key={section.id} className="rounded-xl bg-gray-50 p-3">
-                <ScopeRadio
-                  name="scope"
-                  value={scopeValue('section', section.code)}
-                  current={scope}
-                  onChange={setScope}
-                  label={section.title}
-                  strong
-                />
-                {(ccs.length > 0 || skills.length > 0) && (
-                  <div className="mt-2 grid grid-cols-1 gap-1.5 pl-5 sm:grid-cols-2">
-                    {ccs.map((cc) => (
-                      <ScopeRadio
-                        key={cc.code}
-                        name="scope"
-                        value={scopeValue('content_category', cc.code)}
-                        current={scope}
-                        onChange={setScope}
-                        label={cc.label}
-                      />
-                    ))}
-                    {skills.map((sk) => (
-                      <ScopeRadio
-                        key={sk.code}
-                        name="scope"
-                        value={scopeValue('skill', sk.code)}
-                        current={scope}
-                        onChange={setScope}
-                        label={sk.label}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {tree?.disciplines.map((d) => (
+            <div key={d.discipline} className="rounded-xl bg-gray-50 p-3">
+              <ScopeRadio
+                name="scope"
+                value={scopeValue({ scopeKind: 'discipline', scopeCode: d.discipline })}
+                current={scope}
+                onChange={setScope}
+                label={d.title}
+                strong
+              />
+              {d.topics.length > 0 && (
+                <div className="mt-2 grid grid-cols-1 gap-1.5 pl-5 sm:grid-cols-2">
+                  {d.topics.map((t) => (
+                    <ScopeRadio
+                      key={t.slug}
+                      name="scope"
+                      value={scopeValue({ scopeKind: 'topic', scopeCode: t.slug })}
+                      current={scope}
+                      onChange={setScope}
+                      label={t.title}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+        <h3 className="mb-1 text-lg font-semibold text-gray-700">AAMC content categories</h3>
+        <p className="mb-3 text-sm text-gray-500">
+          Optional — narrow the pool to questions tagged with any selected category.
+        </p>
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {tags.map((t) => {
+              const key = `${t.vocab}:${t.code}`
+              const on = selectedTagKeys.has(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleTag(key)}
+                  aria-pressed={on}
+                  title={t.title}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    on
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  {t.code}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No tag vocabulary available.</p>
+        )}
+        {selectedTagKeys.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedTagKeys(new Set())}
+            className="mt-3 text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Clear {selectedTagKeys.size} selected
+          </button>
+        )}
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
         <h3 className="mb-3 text-lg font-semibold text-gray-700">Refine</h3>
         <div className="flex flex-wrap gap-2">
-          {refineOptions.map((opt) => (
+          {REFINE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"

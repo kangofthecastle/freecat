@@ -3,7 +3,7 @@ import type { ContentIndex, QuestionContent } from '../content/types'
 import type {
   StartSessionInput, StartSessionResult, PresentedQuestion, PresentedPassage,
   SubmitAnswerInput, SubmitAnswerResult, SessionSummary, SessionSummaryRow,
-  ChoiceLetter, ServiceResult
+  ChoiceLetter, ServiceResult, Tag
 } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import { createSession } from '../repositories/qbank-sessions'
@@ -22,6 +22,17 @@ function scopeIds(index: ContentIndex, input: StartSessionInput): string[] {
   if (input.scopeKind === 'topic') return index.byTopic.get(input.scopeCode ?? '') ?? []
   if (input.scopeKind === 'discipline') return index.byDiscipline.get(input.scopeCode ?? '') ?? []
   return index.allQuestionIds
+}
+
+/** Keep only ids whose question carries ≥1 of the selected tags (union/OR semantics).
+ *  An empty/absent filter is a no-op. */
+function applyTagFilter(index: ContentIndex, ids: string[], tagFilter: Tag[] | undefined): string[] {
+  if (!tagFilter || tagFilter.length === 0) return ids
+  const wanted = new Set(tagFilter.map((t) => `${t.vocab}:${t.code}`))
+  return ids.filter((id) => {
+    const tags = index.byId.get(id)?.tags ?? []
+    return tags.some((t) => wanted.has(`${t.vocab}:${t.code}`))
+  })
 }
 
 /** Strip a stored question to its renderer-facing shape: topic + section for display,
@@ -62,8 +73,8 @@ export async function planSession(
   // question's persisted flag state (so a previously-flagged question shows ★ on re-encounter).
   const flaggedSet = new Set(await listFlaggedIds(db))
 
-  // 1. eligible ids by scope, then intersect with the refine set.
-  let eligible = scopeIds(index, input)
+  // 1. eligible ids by scope, narrow by the optional tag filter, then intersect with the refine set.
+  let eligible = applyTagFilter(index, scopeIds(index, input), input.tagFilter)
   if (input.refine === 'incorrect') {
     const allow = new Set(await latestIncorrectQuestionIds(db))
     eligible = eligible.filter((id) => allow.has(id))

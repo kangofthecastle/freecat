@@ -105,6 +105,8 @@ export interface StartSessionInput {
   scopeCode?: string
   refine: Refine
   count: number
+  /** Optional AAMC (or other-vocab) tag filter; a question passes with ≥1 selected tag. Empty/absent = no filter. */
+  tagFilter?: Tag[]
 }
 export interface StartSessionResult {
   sessionId: number

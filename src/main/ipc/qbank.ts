@@ -13,7 +13,8 @@ export const startSessionSchema = z.object({
   scopeKind: z.enum(['mixed', 'discipline', 'topic']),
   scopeCode: z.string().min(1).max(64).optional(),
   refine: z.enum(['all', 'incorrect', 'flagged']),
-  count: z.number().int().min(1).max(100)
+  count: z.number().int().min(1).max(100),
+  tagFilter: z.array(z.object({ vocab: z.string().min(1), code: z.string().min(1) })).optional()
 })
 export const submitAnswerSchema = z.object({
   sessionId: z.number().int().positive(),

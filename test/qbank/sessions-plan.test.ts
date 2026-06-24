@@ -135,6 +135,45 @@ describe('planSession', () => {
     const r = await planSession(index, db, { scopeKind: 'mixed', refine: 'flagged', count: 10 }, { now: NOW, rng: rng0 })
     expect(r.questions.map((x) => x.id)).toEqual(['cp-q2'])
   })
+
+  it('tagFilter keeps questions carrying at least one selected tag', async () => {
+    // physics.mechanics questions carry aamc:4A → matching tag keeps them.
+    const r = await planSession(
+      index, db,
+      { scopeKind: 'topic', scopeCode: 'physics.mechanics', refine: 'all', count: 10, tagFilter: [{ vocab: 'aamc', code: '4A' }] },
+      { now: NOW, rng: rng0 }
+    )
+    expect(r.questions.map((x) => x.id)).toEqual(['cp-q1', 'cp-q2'])
+  })
+
+  it('tagFilter excludes questions lacking every selected tag', async () => {
+    // physics.mechanics questions carry aamc:4A but NOT aamc:1A → filtered out.
+    const r = await planSession(
+      index, db,
+      { scopeKind: 'topic', scopeCode: 'physics.mechanics', refine: 'all', count: 10, tagFilter: [{ vocab: 'aamc', code: '1A' }] },
+      { now: NOW, rng: rng0 }
+    )
+    expect(r.questions).toEqual([])
+  })
+
+  it('tagFilter passes a question with ANY one of several selected tags', async () => {
+    // Union semantics: cp-q* match via 4A even though they lack 1A.
+    const r = await planSession(
+      index, db,
+      { scopeKind: 'topic', scopeCode: 'physics.mechanics', refine: 'all', count: 10, tagFilter: [{ vocab: 'aamc', code: '1A' }, { vocab: 'aamc', code: '4A' }] },
+      { now: NOW, rng: rng0 }
+    )
+    expect(r.questions.map((x) => x.id)).toEqual(['cp-q1', 'cp-q2'])
+  })
+
+  it('an empty tagFilter is a no-op (whole scope retained)', async () => {
+    const r = await planSession(
+      index, db,
+      { scopeKind: 'topic', scopeCode: 'physics.mechanics', refine: 'all', count: 10, tagFilter: [] },
+      { now: NOW, rng: rng0 }
+    )
+    expect(r.questions.map((x) => x.id)).toEqual(['cp-q1', 'cp-q2'])
+  })
 })
 
 describe('summarize', () => {
