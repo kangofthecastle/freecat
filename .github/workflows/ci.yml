@@ -32,6 +32,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # npm 11 (Node 24) can skip electron's postinstall, leaving path.txt unwritten
+      # so any `import 'electron'` throws "failed to install correctly". Run it explicitly.
+      - name: Ensure Electron binary
+        run: node node_modules/electron/install.js
+
       - name: Typecheck
         run: npx tsc --noEmit
 
