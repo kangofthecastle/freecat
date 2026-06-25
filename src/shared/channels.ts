@@ -23,5 +23,11 @@ export const CH = {
   qbankCompleteSession: 'qbank:completeSession',
   qbankToggleFlag: 'qbank:toggleFlag',
   qbankDashboard: 'qbank:dashboard',
-  qbankQuestionsForTaxonomy: 'qbank:questionsForTaxonomy'
+  qbankQuestionsForTaxonomy: 'qbank:questionsForTaxonomy',
+  fcImportDeck:    'flashcards:importDeck',
+  fcListDeckSets:  'flashcards:listDeckSets',
+  fcListDecks:     'flashcards:listDecks',
+  fcListCards:     'flashcards:listCards',
+  fcGetCard:       'flashcards:getCard',
+  fcDeleteDeckSet: 'flashcards:deleteDeckSet'
 } as const

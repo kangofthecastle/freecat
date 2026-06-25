@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol } from 'electron'
+import { app, BrowserWindow, dialog, protocol, session } from 'electron'
 import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
@@ -7,6 +7,7 @@ import { registerGamificationIpc } from './ipc/gamification'
 import { registerContentReviewIpc } from './ipc/content-review'
 import { registerTaxonomyIpc } from './ipc/taxonomy'
 import { registerQbankIpc } from './ipc/qbank'
+import { registerFlashcardsIpc } from './ipc/flashcards'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { createLessonStore } from './content/lessons'
@@ -14,11 +15,21 @@ import { contentRoot } from './content/root'
 import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
 import { scanContent } from './content/loader'
 import type { ContentIndex } from './content/types'
+import { createMediaHandler } from './flashcards/media-protocol'
+import { flashcardsMediaDir } from './flashcards/paths'
 
-// The content protocol must be privileged BEFORE app 'ready' (Electron requirement).
+// Privileged schemes must be registered BEFORE app 'ready' (Electron requirement) — one call for all.
 protocol.registerSchemesAsPrivileged([
-  { scheme: CONTENT_PROTOCOL, privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
+  { scheme: CONTENT_PROTOCOL, privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } },
+  { scheme: 'freecat-media', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: false } }
 ])
+
+// Minimal app-document CSP (O4): production only — a static <meta> would break Vite dev
+// HMR (inline scripts + eval + ws). The card iframe carries its own strict CSP regardless.
+const APP_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: freecat-content:; font-src 'self' data:; frame-src 'self'; connect-src 'self'; " +
+  "object-src 'none'; base-uri 'self'"
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -94,6 +105,15 @@ app.whenReady().then(async () => {
   registerContentReviewIpc(db, lessonStore)
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index)
+  registerFlashcardsIpc(db)
+
+  protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
+
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+      cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [APP_CSP] } })
+    })
+  }
 
   createWindow()
   app.on('activate', () => {
