@@ -28,7 +28,7 @@ protocol.registerSchemesAsPrivileged([
 // HMR (inline scripts + eval + ws). The card iframe carries its own strict CSP regardless.
 const APP_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data:; font-src 'self' data:; frame-src 'self'; connect-src 'self'; " +
+  "img-src 'self' data: freecat-content:; font-src 'self' data:; frame-src 'self'; connect-src 'self'; " +
   "object-src 'none'; base-uri 'self'"
 
 function createWindow(): void {
