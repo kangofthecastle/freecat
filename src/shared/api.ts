@@ -50,4 +50,5 @@ export interface FreecatApi {
     listCards: (input: ListCardsInput) => Promise<CardListPage>
     getCard: (cardId: number) => Promise<ServiceResult<CardView>>
     deleteDeckSet: (deckSetId: number) => Promise<ServiceResult<null>>
+  }
 }
