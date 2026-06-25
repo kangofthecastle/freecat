@@ -1,0 +1,11 @@
+id: cp-bad-missing-correct
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'A question with no correct letter.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+explanation: 'The required `correct` field is absent.'

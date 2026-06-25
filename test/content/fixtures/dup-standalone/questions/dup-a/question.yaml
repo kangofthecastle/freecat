@@ -1,0 +1,12 @@
+id: cp-dup-standalone
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'The first item declaring this id — it commits.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'First-seen wins; the duplicate sibling is rejected.'

@@ -1,0 +1,11 @@
+id: cp-bad-choices
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'A question with the wrong number of choices.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+correct: A
+explanation: 'Only three choices are present; exactly four are required.'

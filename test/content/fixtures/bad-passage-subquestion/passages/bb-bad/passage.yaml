@@ -1,0 +1,29 @@
+id: bb-bad-subquestion
+topic: biochem.enzymes
+tags:
+  - { vocab: aamc, code: '1A' }
+passage: |
+  A passage whose first sub-question is valid but whose second carries an
+  unknown tag, so the whole passage (and its valid sub-question) must be
+  rejected atomically — nothing half-commits.
+questions:
+  - id: bb-bad-q1
+    stem: 'A valid sub-question that must NOT survive its passage being rejected.'
+    choices:
+      - 'a'
+      - 'b'
+      - 'c'
+      - 'd'
+    correct: A
+    explanation: 'This sub-question is well-formed but its sibling is not.'
+  - id: bb-bad-q2
+    tags:
+      - { vocab: aamc, code: '9Z' }
+    stem: 'A sub-question carrying a tag outside the AAMC vocabulary.'
+    choices:
+      - 'a'
+      - 'b'
+      - 'c'
+      - 'd'
+    correct: B
+    explanation: 'The tag 9Z is unknown, so this question fails validation.'

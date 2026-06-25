@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { DISCIPLINES, TOPICS, AAMC_CODES, AAMC_CONTENT_CATEGORIES } from '../../src/main/db/seed/taxonomy-data'
 
 describe('taxonomy seed data', () => {
-  it('has 5 disciplines and 25 topics', () => {
-    expect(DISCIPLINES).toHaveLength(5)
-    expect(TOPICS).toHaveLength(25)
+  it('has 6 disciplines and 29 topics', () => {
+    expect(DISCIPLINES).toHaveLength(6)
+    expect(TOPICS).toHaveLength(29)
   })
 
   it('uses unique topic slugs', () => {

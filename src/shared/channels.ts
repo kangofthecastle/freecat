@@ -15,5 +15,13 @@ export const CH = {
   contentGetLesson: 'content:getLesson',
   contentMarkViewed: 'content:markViewed',
   contentMarkComplete: 'content:markComplete',
-  contentLessonForTaxonomy: 'content:lessonForTaxonomy'
+  contentLessonForTaxonomy: 'content:lessonForTaxonomy',
+  taxonomyList: 'taxonomy:list',
+  taxonomyTags: 'taxonomy:tags',
+  qbankStartSession: 'qbank:startSession',
+  qbankSubmitAnswer: 'qbank:submitAnswer',
+  qbankCompleteSession: 'qbank:completeSession',
+  qbankToggleFlag: 'qbank:toggleFlag',
+  qbankDashboard: 'qbank:dashboard',
+  qbankQuestionsForTaxonomy: 'qbank:questionsForTaxonomy'
 } as const

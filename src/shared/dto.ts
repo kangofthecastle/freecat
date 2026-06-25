@@ -28,7 +28,7 @@ export interface ActivityResult { streak: number; daily: DailyProgress; eggBecam
 export interface RecordActivityInput { kind: string; count?: number; taxonomyRef?: string }
 
 // --- Content Review ---
-export type DisciplineKey = 'gen-chem' | 'o-chem' | 'biology' | 'biochem' | 'behavioral-sci'
+export type DisciplineKey = 'gen-chem' | 'o-chem' | 'physics' | 'biology' | 'biochem' | 'behavioral-sci'
 export type LessonStatus = 'not-started' | 'in-progress' | 'completed'
 
 export interface LessonSummary {
@@ -68,4 +68,81 @@ export interface LessonRef {
 export interface MarkCompleteResult {
   status: LessonStatus
   activity?: ActivityResult
+}
+
+// ── Shared taxonomy scope tree (served to the Qbank renderer) ──
+/** MCAT test section, derived from a discipline (no CARS). */
+export type SectionCode = 'chem-phys' | 'bio-biochem' | 'psych-soc'
+/** A multi-vocabulary content tag, e.g. { vocab: 'aamc', code: '1A' }. */
+export interface Tag { vocab: string; code: string }
+/** A tag-vocabulary entry (a `Tag` plus its human title), served to populate filters. */
+export interface TagVocabEntry { vocab: string; code: string; title: string }
+export interface TopicDto { slug: string; title: string; aamcCodes: string[] }
+export interface DisciplineTreeDto { discipline: DisciplineKey; title: string; topics: TopicDto[] }
+
+// ── Qbank DTOs (renderer-facing; no answer key leaves the main process) ──
+export type ChoiceLetter = 'A' | 'B' | 'C' | 'D'
+export type ScopeKind = 'mixed' | 'discipline' | 'topic'
+export type Refine = 'all' | 'incorrect' | 'flagged'
+
+export interface PresentedQuestion {
+  id: string
+  topic: string // NEW — primary topic slug; drives the outbound cross-link
+  section: SectionCode // derived (kept for display)
+  passageId: string | null
+  stem: string
+  choices: [string, string, string, string]
+  /** Whether this question is currently flagged (persisted across sessions). Never an answer-key field. */
+  flagged: boolean
+  // NOTE: no answer key; no `skill`; no `contentCategory`
+}
+export interface PresentedPassage { id: string; passage: string }
+/** A lightweight question reference for cross-links (CR "Practice this topic"). */
+export interface QuestionRef { id: string; topic: string }
+
+export interface StartSessionInput {
+  scopeKind: ScopeKind
+  scopeCode?: string
+  refine: Refine
+  count: number
+  /** Optional AAMC (or other-vocab) tag filter; a question passes with ≥1 selected tag. Empty/absent = no filter. */
+  tagFilter?: Tag[]
+}
+export interface StartSessionResult {
+  sessionId: number
+  mode: string
+  questions: PresentedQuestion[]
+  passages: Record<string, PresentedPassage>
+}
+
+export interface SubmitAnswerInput {
+  sessionId: number
+  questionId: string
+  choice: ChoiceLetter
+  timeMs?: number
+}
+export interface AnswerResult {
+  correct: boolean
+  correctChoice: ChoiceLetter
+  explanation: string
+  choiceExplanations: Partial<Record<ChoiceLetter, string>>
+}
+export interface SubmitAnswerResult extends AnswerResult {
+  activity: ActivityResult | null
+}
+
+export interface SessionSummaryRow { questionId: string; chosen: ChoiceLetter; isCorrect: boolean }
+export interface SessionSummary { sessionId: number; total: number; correct: number; rows: SessionSummaryRow[] }
+
+// ── Dashboard accuracy DTOs (by discipline/topic via SQL; by AAMC via JS over the content index) ──
+export interface TopicAccuracy { topic: string; title: string; discipline: DisciplineKey; answered: number; correct: number }
+export interface DisciplineAccuracy { discipline: DisciplineKey; title: string; answered: number; correct: number }
+export interface AamcAccuracy { code: string; title: string; answered: number; correct: number }
+export interface DashboardStats {
+  totalAnswered: number
+  totalCorrect: number
+  byDiscipline: DisciplineAccuracy[]
+  byTopic: TopicAccuracy[]
+  byAamc: AamcAccuracy[] // computed in JS over the content index
+  latestIncorrectQuestionIds: string[]
 }

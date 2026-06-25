@@ -1,0 +1,30 @@
+id: ps-0001-reinforcement-schedules
+topic: behavioral-sci.learning-memory-cognition
+tags: [{ vocab: aamc, code: '7A' }]
+stem: |
+  A behavioral researcher trains two rats to press a lever for food. Rat A receives a
+  food pellet after **every** press. Rat B receives a pellet only after an
+  **unpredictable, varying number** of presses. After training, the food dispenser is
+  switched off for both animals.
+
+  Which outcome and underlying schedule best describe Rat B's behavior once
+  reinforcement stops?
+choices:
+  - "Rat B's lever-pressing is more resistant to extinction because it was on a variable-ratio schedule."
+  - "Rat B's lever-pressing extinguishes faster because it was on a fixed-ratio schedule."
+  - "Rat B's lever-pressing is more resistant to extinction because it was on a fixed-interval schedule."
+  - "Rat B's lever-pressing extinguishes faster because it was on a continuous reinforcement schedule."
+correct: A
+explanation: |
+  Rat B was reinforced after an unpredictable, varying number of responses — a
+  **variable-ratio (VR)** schedule. Partial (intermittent) reinforcement, and VR
+  schedules in particular, produce behavior that is **highly resistant to extinction**:
+  because reinforcement was already irregular during training, the absence of a reward
+  on any given press is not a reliable cue that rewards have stopped. Rat A, on
+  **continuous reinforcement**, experiences the switch-off as an obvious change and
+  extinguishes more quickly. This greater persistence under intermittent reinforcement
+  is the **partial reinforcement extinction effect**.
+choiceExplanations:
+  B: "Rat B was reinforced after a *varying* number of presses (variable ratio), not a fixed number; and intermittent schedules slow extinction rather than speed it."
+  C: "An interval schedule reinforces the first response after a period of *time*; here reinforcement depended on the *number* of responses, making it a ratio schedule."
+  D: "Continuous reinforcement describes **Rat A**, not Rat B, and it produces *faster* extinction, not slower."

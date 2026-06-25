@@ -1,7 +1,13 @@
 import type {
   ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView,
-  Outline, LessonDetail, LessonRef, MarkCompleteResult
+  Outline, LessonDetail, LessonRef, MarkCompleteResult,
+  DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
+  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats, QuestionRef
 } from './dto'
+
+// The qbank submit/flag handlers wrap their result in a ServiceResult (the main process never
+// throws across IPC for a not-found question / a flag write); these renderer-facing signatures
+// mirror that envelope so callers branch on `.ok`.
 
 export interface FreecatApi {
   profile: { get: () => Promise<ProfileDto>; setName: (name: string) => Promise<ProfileDto> }
@@ -23,5 +29,17 @@ export interface FreecatApi {
     markViewed: (slug: string) => Promise<void>
     markComplete: (slug: string, completed: boolean) => Promise<ServiceResult<MarkCompleteResult>>
     lessonForTaxonomy: (ref: string) => Promise<LessonRef | null>
+  }
+  taxonomy: {
+    list: () => Promise<DisciplineTreeDto[]>
+    tags: () => Promise<TagVocabEntry[]>
+  }
+  qbank: {
+    startSession: (input: StartSessionInput) => Promise<StartSessionResult>
+    submitAnswer: (input: SubmitAnswerInput) => Promise<ServiceResult<SubmitAnswerResult>>
+    completeSession: (sessionId: number) => Promise<SessionSummary>
+    toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>
+    dashboard: () => Promise<DashboardStats>
+    questionsForTaxonomy: (topicSlug: string) => Promise<QuestionRef[]>
   }
 }

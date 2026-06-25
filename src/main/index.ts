@@ -1,14 +1,24 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, protocol } from 'electron'
 import { join } from 'path'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
 import { registerProfileIpc } from './ipc/profile'
 import { registerGamificationIpc } from './ipc/gamification'
 import { registerContentReviewIpc } from './ipc/content-review'
+import { registerTaxonomyIpc } from './ipc/taxonomy'
+import { registerQbankIpc } from './ipc/qbank'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { createLessonStore } from './content/lessons'
 import { contentRoot } from './content/root'
+import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
+import { scanContent } from './content/loader'
+import type { ContentIndex } from './content/types'
+
+// The content protocol must be privileged BEFORE app 'ready' (Electron requirement).
+protocol.registerSchemesAsPrivileged([
+  { scheme: CONTENT_PROTOCOL, privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
+])
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -38,16 +48,52 @@ function migrationsFolder(): string {
   return app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
 }
 
+function emptyIndex(): ContentIndex {
+  return {
+    byId: new Map(),
+    passagesById: new Map(),
+    byTopic: new Map(),
+    byDiscipline: new Map(),
+    byTag: new Map(),
+    allQuestionIds: [],
+    errors: []
+  }
+}
+
+// Build the in-memory question index from disk. An empty/missing tree yields an empty
+// index. `scanContent` never throws — it collects per-item errors — so a malformed item
+// degrades that item (logged) rather than crashing boot; a hard failure also degrades to empty.
+function buildContentIndex(root: string): ContentIndex {
+  try {
+    const index = scanContent(root)
+    if (index.errors.length > 0) {
+      console.error(`[content] ${index.errors.length} content error(s); affected items were skipped:`)
+      for (const e of index.errors) console.error(`  ${e.file}: ${e.message}`)
+    }
+    return index
+  } catch (e) {
+    console.error('[content] failed to load content tree; starting with an empty index:', e)
+    return emptyIndex()
+  }
+}
+
 app.whenReady().then(async () => {
   const dbPath = join(app.getPath('userData'), 'freecat.db')
   const db = createDb(`file:${dbPath}`)
   await runMigrations(db, migrationsFolder())
-  await ensureStarterGrant(db)
   await seedTaxonomy(db)
-  const lessonStore = createLessonStore(contentRoot())
+  await ensureStarterGrant(db)
+
+  const root = contentRoot()
+  registerContentProtocol(root)
+  const lessonStore = createLessonStore(root)
+  const index = buildContentIndex(root)
+
   registerProfileIpc(db)
   registerGamificationIpc(db)
   registerContentReviewIpc(db, lessonStore)
+  registerTaxonomyIpc(db)
+  registerQbankIpc(db, index)
 
   createWindow()
   app.on('activate', () => {

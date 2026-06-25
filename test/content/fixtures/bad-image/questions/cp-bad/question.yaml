@@ -1,0 +1,13 @@
+id: cp-bad-image
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: |
+  A question that references a missing image. ![missing](does-not-exist.png)
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'The referenced relative image is not present in the item directory.'

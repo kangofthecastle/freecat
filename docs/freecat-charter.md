@@ -2,7 +2,7 @@
 
 > **This is the single set of goals for FreeCAT. Read it in full before starting any work session, then read the relevant module handoff in `docs/handoffs/`.** It defines what we are building, the architecture every module shares, and the contracts that let the modules be built independently without colliding.
 
-_Last updated: 2026-06-22 · Status: Foundation app skeleton built (PR #1); gamification layer built (`feat/gamification-port`, separate PR). The MCAT taxonomy + authored-content pipeline are deferred — defined in the Qbank brainstorm (§5.1, §5.5), not pre-built._
+_Last updated: 2026-06-24 · Status: Foundation app skeleton built (PR #1); gamification layer built. **Content Review built (PR #5)** — it settled the shared MCAT taxonomy as **discipline→topic** + a content pipeline (§5.1, §5.5). **Qbank reconciled onto that backbone** (`feat/qbank` — green: typecheck/build/tests/content:validate all pass — **PR open to `main`**): added a **Physics** discipline, **dropped CARS**, retired the topic↔AAMC bridge, unified the content pipeline, and wired topic-level cross-links to Content Review (spec: `docs/superpowers/specs/2026-06-24-qbank-reconcile-design.md`)._
 
 ---
 
@@ -21,6 +21,7 @@ Guiding principles:
 ## 2. Non-goals (explicit)
 
 - ❌ **Full-length timed practice exams** — out of scope now and most likely forever.
+- ❌ **CARS (Critical Analysis & Reasoning)** — excluded from the app; questions and lessons cover the science + behavioral-science disciplines only (decided 2026-06-24).
 - ❌ **Hosted backend / accounts / cloud sync / AnkiWeb sync** — nothing is hosted.
 - ❌ **Multi-user / teacher-student / classroom** — single local profile only (multi-profile may come much later).
 - ❌ **In-app question authoring** — authored content is contributed as files via GitHub PRs, not created in-app.
@@ -63,15 +64,15 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
         └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-**What lives where (and why parallel work is still safe):** the **module-agnostic** contracts live in the Foundation, built once up front — the base DB schema + repository/IPC conventions, the gamification API, navigation slots, and the design system. Two **shared, content-shaped** contracts — the **MCAT taxonomy** and the **authored-content pipeline** — are *not* pre-built: they encode product decisions, so they're defined in the **Qbank brainstorm** (the first content module, with Warren) and then reused by Content Review. Each module owns only its own tables and screens and otherwise consumes these shared pieces — never forking them. Consequence: **Qbank and Content Review share the content model and are sequenced Qbank-first; Flashcards is independent** (its content is imported) and can go anytime.
+**What lives where (and why parallel work is still safe):** the **module-agnostic** contracts live in the Foundation, built once up front — the base DB schema + repository/IPC conventions, the gamification API, navigation slots, and the design system. Two **shared, content-shaped** contracts — the **MCAT taxonomy** and the **authored-content pipeline** — encode product decisions; they were **settled by Content Review (PR #5)** and Qbank is **reconciled onto them** (§5.1/§5.5). Each module owns only its own tables and screens and otherwise consumes these shared pieces — never forking them. Consequence: **Qbank and Content Review share the content model — Content Review landed it first and Qbank reconciles onto it; Flashcards is independent** (its content is imported) and can go anytime.
 
 ### Module briefs
 
 - **Foundation (Phase 0).** The module-agnostic substrate only: the Electron+Vite app skeleton, local SQLite + Drizzle + migrations + first-run profile, the typed IPC data layer + repository convention, the ported gamification layer, and the app shell / design system with stubbed module screens. (The MCAT taxonomy + authored-content pipeline are **not** here — see §5.1 / §5.5.) Spec: `docs/superpowers/specs/2026-06-20-foundation-design.md` (now aligned with this division). **The app skeleton is built (PR #1) and the gamification layer is built (`feat/gamification-port`);** packaging/release CI (C8) is the remaining module-agnostic piece.
 
-- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. **Qbank defines the shared content model in its brainstorm (with Warren) — the MCAT taxonomy and the authored-content pipeline — which Content Review then reuses.** Known so far: exactly **4 answer choices**, **passage-based + standalone** questions, **some with photos**. Plus practice sessions, answer + explanation flow, flagging/review, per-topic performance — feeding gamification. See `docs/handoffs/qbank.md`.
+- **Module 1 — Qbank** (the heart). Original MCAT practice questions delivered from bundled content files. Built on `feat/qbank` and **reconciled onto Content Review's shared discipline→topic taxonomy + pipeline** (§5.1/§5.5; spec `2026-06-24-qbank-reconcile-design.md`; green, **PR open to `main`**). Core: exactly **4 answer choices**, **passage-based + standalone** questions, **some with figures**; practice sessions, answer + per-choice explanation flow, flagging/review, per-topic performance, and **topic-level cross-links to Content Review** (miss a question → its lesson; practice a topic from its lesson) — feeding gamification. See `docs/handoffs/qbank.md` + `qbank-reconcile.md`.
 
-- **Module 2 — Content Review** (lessons). Readable topic lessons from bundled content files, tightly cross-linked to the Qbank through the shared taxonomy (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification.
+- **Module 2 — Content Review** (lessons). **Built (PR #5)** — it settled the shared discipline→topic taxonomy + content pipeline v0. Readable topic lessons from bundled content files, cross-linked to Qbank through the shared topic slug (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification.
 
 - **Module 3 — Flashcards** (deep Anki). A faithful local Anki reviewer; the most self-contained module — its content is user-imported (bring-your-own decks), so it integrates loosely (tag-based) rather than through the authored-content pipeline. **Deep-B scope:** import `.apkg`/`.colpkg` (legacy and modern zstd/protobuf formats), general note-type/template rendering, cloze, media (image + audio), MathJax, tags + deck/subdeck tree, **FSRS** scheduling, honoring a deck's existing scheduling history when present, and **image occlusion** (the single biggest lift). Out: AnkiWeb sync, export to `.apkg`, filtered decks, arbitrary add-ons. (`ts-fsrs` is a candidate library; sat-world's `src/lib/srs/*` is a reference/fallback, not FSRS.)
 
@@ -81,21 +82,17 @@ _Per-module handoff briefs are in `docs/handoffs/` (`qbank.md`, `content-review.
 
 ## 5. Shared contracts
 
-Most of these are **module-agnostic** and owned by the Foundation, built once up front: the DB/schema conventions (§5.2), the IPC contract (§5.3), the gamification API (§5.4), the app shell (§5.6). Two are **shared but content-shaped** — the **taxonomy (§5.1)** and the **authored-content pipeline (§5.5)** — and are **defined in the Qbank brainstorm (with Warren), not pre-built**, then reused by Content Review. Either way, modules consume these and must not fork them.
+Most of these are **module-agnostic** and owned by the Foundation, built once up front: the DB/schema conventions (§5.2), the IPC contract (§5.3), the gamification API (§5.4), the app shell (§5.6). Two are **shared but content-shaped** — the **taxonomy (§5.1)** and the **authored-content pipeline (§5.5)** — and were **settled by Content Review (PR #5)** and **reconciled into Qbank**. Either way, modules consume these and must not fork them.
 
 ### 5.1 MCAT taxonomy (the integration backbone)
 
-A single hierarchy that questions, lessons, and (loosely) flashcards all reference, so the modules cross-link.
+A two-level hierarchy that questions and lessons both reference, so the modules cross-link. **Settled by Content Review (PR #5) and reconciled into Qbank** (`feat/qbank`).
 
-- **Sections (4):** `chem-phys` (C/P), `cars` (CARS), `bio-biochem` (B/B), `psych-soc` (P/S).
-- **Science sections** are organized as **Foundational Concept → Content Category → Topic**:
-  - B/B: FC1 (`1A`–`1D`), FC2 (`2A`–`2C`), FC3 (`3A`–`3B`)
-  - C/P: FC4 (`4A`–`4E`), FC5 (`5A`–`5E`)
-  - P/S: FC6 (`6A`–`6C`), FC7 (`7A`–`7C`), FC8 (`8A`–`8C`), FC9 (`9A`–`9B`), FC10 (`10A`)
-- **CARS** has no content categories; it uses **skill** nodes (Foundations of Comprehension; Reasoning Within the Text; Reasoning Beyond the Text) over humanities / social-science passages.
-- **Cross-cutting:** the 4 Scientific Inquiry & Reasoning Skills (SIRS) and discipline tags (biochem, biology, gen-chem, org-chem, physics, psych, soc).
-
-Modeled as taxonomy nodes `{ id, kind: 'section'|'foundational_concept'|'content_category'|'skill'|'topic', code, title, parentId }`, seeded from the published AAMC content outline; authored content references a `contentCategory` (or `skill` for CARS) plus free-form `topics`. **This is defined in the Qbank brainstorm (with Warren), not pre-built** — how it's used (browsing, tagging, granularity) is a product decision. A draft encoding of the full AAMC outline already exists in git history (commits `6b3880a`, `181bdec`) and can be reused as a starting point.
+- **Spine = discipline → topic**, modeled as `taxonomy_node { id, kind: 'discipline'|'topic', slug, title, parentId, sortOrder }`, seeded idempotently.
+- **6 disciplines:** `gen-chem`, `o-chem`, `physics` (added in the Qbank reconcile), `biology`, `biochem`, `behavioral-sci` — ~29 topics total (a topic slug looks like `biochem.enzymes`).
+- **AAMC is a per-item tag vocabulary, not the spine.** Each topic carries reference AAMC code(s); authored items declare one **primary `topic`** plus zero-or-more **tags** `{ vocab, code }` (AAMC now, Kaplan/others later). The old topic↔AAMC bridge table (`topic_aamc_category`) is **retired**; tags live on the items and in the in-memory content index.
+- **The MCAT sections (C/P, B/B, P/S)** are **derived from discipline** for display only — not a primary axis. **CARS is excluded from the app** (§2), so the `skill` axis is gone.
+- **Cross-links resolve on the shared topic slug** (a lesson's slug equals its topic's slug): miss a question → its topic's lesson; finish a lesson → practice that topic.
 
 **Update (2026-06-23, Content Review):** the working taxonomy is **discipline→topic-primary** — 5 disciplines (`gen-chem`, `o-chem`, `biology`, `biochem`, `behavioral-sci`; no Physics/CARS in v1) with ~25 topics, each topic also carrying mapped **AAMC content-category code(s)** as a secondary bridge. It is **DB-seeded** (`taxonomy_node` + `topic_aamc_category`) and was defined in the **Content Review brainstorm** (Qbank built in parallel). The cross-link key is the **topic slug**; Qbank tags questions against it.
 
@@ -104,7 +101,7 @@ Modeled as taxonomy nodes `{ id, kind: 'section'|'foundational_concept'|'content
 One SQLite file, one Drizzle schema, split by ownership:
 
 - **Foundation owns:** `profile` and the gamification tables (pet, XP/economy, streak, daily-goal).
-- **Qbank owns:** question attempts, practice sessions, flags. As the first content module it also **establishes the shared `taxonomy` + content-registry tables** (metadata about loaded authored content), which Content Review then reuses.
+- **Qbank owns:** question attempts, practice sessions, flags. The shared **`taxonomy_node`** table was established by **Content Review** (§5.1) and Qbank reconciles onto it; authored content (questions, lessons) is loaded into **in-memory indices**, not registry tables. The `topic_aamc_category` bridge is retired in favor of per-item tags.
 - **Content Review owns:** lesson progress.
 - **Flashcards owns:** imported decks, notes, note types/templates, cards, media references, and per-card scheduling/review state.
 
@@ -126,7 +123,7 @@ A single interface all modules call to register study activity; the Foundation t
 
 ### 5.5 Authored-content pipeline
 
-For Qbank questions and Content Review lessons (NOT flashcards). **Defined in the Qbank brainstorm with Warren and reused by Content Review — not pre-built as foundation.** The shape below is the working sketch, to be finalized there:
+For Qbank questions and Content Review lessons (NOT flashcards). **Established by Content Review (pipeline v0) and unified in the Qbank reconcile:** one `content/` tree, one `freecat-content://` asset protocol, one `content:validate` CI gate, and two loaders — `LessonStore` for lessons, `scanContent` for questions:
 
 - **On disk:** one folder per item under `content/`. A structured **YAML** envelope holds the fields; **Markdown** is allowed in all prose fields (stem, choices, explanation, lesson body) and supports LaTeX math and image embeds. Images are **co-located files** referenced by relative path.
 - **Validation:** one **Zod schema per content type**; CI validates every file on each PR (missing answer, bad taxonomy code, broken image path → fail).

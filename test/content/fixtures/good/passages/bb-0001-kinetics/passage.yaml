@@ -1,0 +1,33 @@
+id: bb-0001-kinetics
+topic: biochem.enzymes
+tags:
+  - { vocab: aamc, code: '1A' }
+passage: |
+  An enzyme follows Michaelis-Menten kinetics. A researcher measures the
+  initial reaction velocity across a range of substrate concentrations and
+  fits the data to determine Km and Vmax.
+questions:
+  - id: bb-0001-q1
+    stem: 'What does Km represent?'
+    choices:
+      - 'The substrate concentration at half Vmax'
+      - 'The maximum reaction velocity'
+      - 'The turnover number'
+      - 'The total enzyme concentration'
+    correct: A
+    explanation: |
+      Km is the substrate concentration at which the reaction proceeds at
+      half its maximum velocity.
+  - id: bb-0001-q2
+    tags:
+      - { vocab: aamc, code: '5E' }
+    stem: 'A competitive inhibitor changes which apparent parameter?'
+    choices:
+      - 'Km increases, Vmax unchanged'
+      - 'Km unchanged, Vmax decreases'
+      - 'Both decrease'
+      - 'Both increase'
+    correct: A
+    explanation: |
+      Competitive inhibition raises apparent Km while leaving Vmax unchanged,
+      because excess substrate can outcompete the inhibitor.

@@ -27,11 +27,15 @@ export function registerContentReviewIpc(db: DB, store: LessonStore): void {
     const topic = await getTopicBySlug(db, slug)
     if (!topic) return null
     const progress = await getProgressForSlug(db, slug)
+    // Aggregate aamc tags from the lesson's sections when present; otherwise fall
+    // back to the topic's aamcCodes so section-less seeds keep their footer.
+    const fromSections = lesson.sections?.flatMap((s) => s.tags.filter((t) => t.vocab === 'aamc').map((t) => t.code))
+    const aamcCategories = fromSections && fromSections.length ? [...new Set(fromSections)] : topic.aamcCodes
     return {
       slug,
       title: lesson.title,
       discipline: topic.discipline,
-      aamcCategories: topic.aamcCodes,
+      aamcCategories,
       html: lesson.html,
       status: deriveStatus(progress)
     }

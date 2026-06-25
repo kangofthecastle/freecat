@@ -1,0 +1,12 @@
+id: cp-bad-unknown-tag
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '9Z' }
+stem: 'A question whose tag is not in the AAMC vocabulary.'
+choices:
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+correct: A
+explanation: 'The tag code 9Z is not a known AAMC content category.'
