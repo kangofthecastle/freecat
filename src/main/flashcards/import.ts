@@ -39,6 +39,14 @@ function legacyMedia(members: Record<string, Uint8Array>): Record<string, Uint8A
   return mediaFiles
 }
 
+/** Remove a parsed collection temp file plus the -wal/-shm sidecars a read-only WAL open can leave
+ *  behind (a read-only connection cannot checkpoint them away on close). Best-effort. */
+export async function removeTempCollection(tmpPath: string): Promise<void> {
+  await Promise.all(
+    [tmpPath, `${tmpPath}-wal`, `${tmpPath}-shm`].map((p) => unlink(p).catch(() => { /* ignore */ }))
+  )
+}
+
 /** Import a deck package from a path into the db, persisting media under mediaDir. No dialog (unit-testable). */
 export async function importFromFile(db: DB, filePath: string, mediaDir: string, opts?: { maxArchiveBytes?: number }): Promise<ServiceResult<DeckSetSummary>> {
   // Precheck the on-disk size before readFile so a multi-GB archive can't force that many bytes resident
@@ -88,7 +96,7 @@ export async function importFromFile(db: DB, filePath: string, mediaDir: string,
     if (e instanceof ImportTooLargeError) return err('import-too-large')
     return err('corrupt-package')
   } finally {
-    await unlink(tmpPath).catch(() => { /* ignore */ })
+    await removeTempCollection(tmpPath)
   }
 
   // Resolve media (modern: protobuf manifest + raw blobs; legacy: JSON map), then store on disk.
