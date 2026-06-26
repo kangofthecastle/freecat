@@ -86,6 +86,21 @@ describe('importFromFile (legacy .apkg, end-to-end)', () => {
     expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'import-too-large' })
   })
 
+  it('rejects an archive larger than the on-disk size ceiling before reading it into memory', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec)
+    const file = join(dir, 'oversized.apkg'); writeFileSync(file, apkg)
+    // A ceiling one byte below the real file size must reject on the stat() precheck — before readFile.
+    const res = await importFromFile(db, file, join(dir, 'media'), { maxArchiveBytes: apkg.length - 1 })
+    expect(res).toEqual({ ok: false, error: 'import-too-large' })
+  })
+
+  it('imports a file exactly at the size ceiling (strict >, no off-by-one)', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec)
+    const file = join(dir, 'atcap.apkg'); writeFileSync(file, apkg)
+    const res = await importFromFile(db, file, join(dir, 'media'), { maxArchiveBytes: apkg.length })
+    expect(res.ok).toBe(true)
+  })
+
   it('maps an Anki-shaped zip with a garbage collection member to corrupt-package', async () => {
     // Valid container (detect → legacy1), but collection.anki2 is not a SQLite db → libsql open/parse fails.
     const file = join(dir, 'bad.apkg'); writeFileSync(file, zipSync({ 'collection.anki2': strToU8('NOT A SQLITE DB'), 'media': strToU8('{}') }))
