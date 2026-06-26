@@ -66,6 +66,14 @@ describe('parseModernCollection', () => {
     // and a byte cap above the real byte length passes.
     await expect(parseModernCollection(path, { maxRows: 1000, maxFieldBytes: 64 })).resolves.toBeTruthy()
   })
+
+  it('rejects a collection whose TOTAL field bytes exceed the aggregate budget (each field small)', async () => {
+    await writeModernCollection(path, spec) // 2 small notes; each field is well under maxFieldBytes
+    // Aggregate cap below the summed field bytes → reject, even though no single field is over the cap.
+    await expect(parseModernCollection(path, { maxTotalFieldBytes: 5 })).rejects.toBeInstanceOf(ImportTooLargeError)
+    // A generous aggregate cap passes.
+    await expect(parseModernCollection(path, { maxTotalFieldBytes: 10_000_000 })).resolves.toBeTruthy()
+  })
 })
 
 describe('openCollectionReadOnly', () => {
