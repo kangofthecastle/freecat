@@ -4,12 +4,25 @@ import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard, ParsedField, ParsedTemplate } from './parsed-collection'
 import { NotetypeConfig, TemplateConfig } from './anki-proto'
 import { ImportTooLargeError, CorruptPackageError } from './zip'
+import { chmodSync } from 'node:fs'
 
 export interface CollectionLimits { maxRows: number; maxFieldBytes: number }
 /** Retained name (the modern parser's original export); now an alias of the shared {@link CollectionLimits}. */
 export type ModernLimits = CollectionLimits
 export const DEFAULT_LIMITS: CollectionLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024 }
 export const DEFAULT_MODERN_LIMITS = DEFAULT_LIMITS
+
+/**
+ * Open an UNTRUSTED collection file read-only. @libsql exposes no read-only flag and rejects
+ * `?mode=ro` / `immutable=1` URIs (URL_PARAM_NOT_SUPPORTED), so read-only is enforced at the OS
+ * level: chmod the (temp, app-owned) file to 0o444 before opening, which makes any write fail with
+ * SQLITE_READONLY regardless of how the SQLite engine opens it. The caller owns the temp file's
+ * lifecycle; unlink still works afterwards (it needs write permission on the directory, not the file).
+ */
+export function openCollectionReadOnly(path: string): Client {
+  chmodSync(path, 0o444)
+  return createClient({ url: `file:${path}` })
+}
 
 /**
  * Cheap pre-ETL amplification guards shared by both the legacy and modern parsers (design spec).
@@ -45,7 +58,7 @@ function toBytes(v: unknown): Uint8Array {
 
 /** Read a schema-18 collection (raw libsql) into the shared ParsedCollection. */
 export async function parseModernCollection(path: string, limits: CollectionLimits = DEFAULT_LIMITS): Promise<ParsedCollection> {
-  const client = createClient({ url: `file:${path}` })
+  const client = openCollectionReadOnly(path)
   try {
     // Amplification guards before building DTOs — cover every table we fully materialize below,
     // so a pathological collection with millions of note-type/field/template/deck rows cannot

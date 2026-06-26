@@ -1,6 +1,5 @@
-import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard } from './parsed-collection'
-import { assertCollectionWithinLimits, DEFAULT_LIMITS, type CollectionLimits } from './parse-modern'
+import { assertCollectionWithinLimits, DEFAULT_LIMITS, openCollectionReadOnly, type CollectionLimits } from './parse-modern'
 import { ImportTooLargeError } from './zip'
 
 interface RawModel { id: number | string; name: string; type: number; css?: string; flds: { name: string; ord: number }[]; tmpls: { name: string; ord: number; qfmt: string; afmt: string }[] }
@@ -10,7 +9,7 @@ const SEP = ''
 
 /** Read a legacy collection.anki2 (raw libsql, NOT drizzle) into a ParsedCollection. */
 export async function parseLegacyCollection(collectionPath: string, limits: CollectionLimits = DEFAULT_LIMITS): Promise<ParsedCollection> {
-  const client = createClient({ url: `file:${collectionPath}` })
+  const client = openCollectionReadOnly(collectionPath)
   try {
     // Same amplification guards the modern parser runs (design spec): a legacy collection.anki2 is
     // raw SQLite bounded only by the 2 GiB per-member ZIP cap, so reject row/field bombs before
