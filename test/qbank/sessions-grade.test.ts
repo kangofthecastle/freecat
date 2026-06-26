@@ -141,4 +141,13 @@ describe('gradeAndRecord', () => {
     if (!r.ok) return
     expect(r.data.activity).toBeNull()
   })
+
+  it('does not re-award gamification on a replayed submit for the same (session, question)', async () => {
+    await gradeAndRecord(index, db, { sessionId, questionId: 'cp-q1', choice: 'A' }, { now: NOW, recordActivityFn: fakeRecord })
+    // A replayed/duplicate submit upserts the attempt (still one row) but must NOT credit activity again.
+    const second = await gradeAndRecord(index, db, { sessionId, questionId: 'cp-q1', choice: 'B' }, { now: NOW, recordActivityFn: fakeRecord })
+    expect(second.ok).toBe(true)
+    expect(await getSessionAttempts(db, sessionId)).toHaveLength(1)
+    expect(fakeRecord).toHaveBeenCalledTimes(1)
+  })
 })

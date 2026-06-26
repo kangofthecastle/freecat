@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import { qbankAttempt, type QbankAttemptRow } from '../db/schema'
 import type { ChoiceLetter } from '../../shared/dto'
@@ -48,6 +48,17 @@ export async function recordAttempt(db: DB, p: RecordAttemptParams): Promise<Qba
   }).returning()
   if (!row) throw new Error('recordAttempt failed to upsert')
   return row
+}
+
+/** Whether an attempt already exists for this (session, question). Used by gradeAndRecord to avoid
+ *  re-awarding gamification on a replayed/duplicate submit (the attempt row itself is upserted). */
+export async function attemptExists(db: DB, sessionId: number, questionId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: qbankAttempt.id })
+    .from(qbankAttempt)
+    .where(and(eq(qbankAttempt.sessionId, sessionId), eq(qbankAttempt.questionId, questionId)))
+    .limit(1)
+  return row !== undefined
 }
 
 export async function getSessionAttempts(db: DB, sessionId: number): Promise<QbankAttemptRow[]> {
