@@ -92,6 +92,11 @@ export class LessonStore {
   }
 }
 
+/**
+ * Build a LessonStore from the on-disk content tree. Production callers MUST pass the taxonomy
+ * topic-slug set so the lesson-slug === topic-slug invariant is enforced (see index.ts); omitting it
+ * (tests/fixtures that exercise the runtime null path) skips validation.
+ */
 export function createLessonStore(root: string, validTopicSlugs?: ReadonlySet<string>): LessonStore {
   return new LessonStore(loadLessons(root), validTopicSlugs)
 }
