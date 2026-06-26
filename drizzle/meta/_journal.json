@@ -36,6 +36,13 @@
       "when": 1782379719217,
       "tag": "0004_wet_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782456305696,
+      "tag": "0005_kind_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

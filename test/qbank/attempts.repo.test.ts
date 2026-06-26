@@ -52,6 +52,18 @@ describe('qbank-attempts repository', () => {
     expect(a.timeMs).toBeNull()
   })
 
+  it('recordAttempt upserts on (session, question): a re-answer overwrites instead of appending', async () => {
+    const sessionId = await newSession()
+    await recordAttempt(db, { sessionId, questionId: 'q-dup', passageId: null, topic: 'physics.mechanics', discipline: 'physics', section: 'chem-phys', chosen: 'A', isCorrect: false, now: NOW })
+    // A second submit for the same question (double-click, replayed IPC) must overwrite, not append.
+    await recordAttempt(db, { sessionId, questionId: 'q-dup', passageId: null, topic: 'physics.mechanics', discipline: 'physics', section: 'chem-phys', chosen: 'C', isCorrect: true, now: later(1000) })
+    const rows = await getSessionAttempts(db, sessionId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.chosen).toBe('C')
+    expect(rows[0]?.isCorrect).toBe(true)
+    expect(rows[0]?.answeredAt.getTime()).toBe(later(1000).getTime())
+  })
+
   it('getSessionAttempts returns only that session\'s attempts', async () => {
     const s1 = await newSession()
     const s2 = await newSession()
