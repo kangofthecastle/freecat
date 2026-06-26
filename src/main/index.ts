@@ -10,6 +10,7 @@ import { registerQbankIpc } from './ipc/qbank'
 import { registerFlashcardsIpc } from './ipc/flashcards'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
+import { TOPICS } from './db/seed/taxonomy-data'
 import { createLessonStore } from './content/lessons'
 import { contentRoot } from './content/root'
 import { CONTENT_PROTOCOL, registerContentProtocol } from './content/images'
@@ -97,7 +98,7 @@ app.whenReady().then(async () => {
 
   const root = contentRoot()
   registerContentProtocol(root)
-  const lessonStore = createLessonStore(root)
+  const lessonStore = createLessonStore(root, new Set(TOPICS.map((t) => t.slug)))
   const index = buildContentIndex(root)
 
   registerProfileIpc(db)
