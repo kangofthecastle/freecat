@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import { writeCollection } from '../../src/main/flashcards/etl'
-import { listDeckSets, listDecks, listCards, deleteDeckSet } from '../../src/main/repositories/flashcards'
+import { listDeckSets, listDecks, listCards, deleteDeckSet, referencedFilenames } from '../../src/main/repositories/flashcards'
+import { rewriteMedia } from '../../src/shared/flashcards/render'
 import type { ParsedCollection } from '../../src/main/flashcards/parsed-collection'
 
 const make = (n: number): ParsedCollection => ({
@@ -86,6 +87,30 @@ describe('flashcards repository', () => {
     for (const p of previews) {
       expect(p).not.toContain('{{')
       expect(p).not.toContain('}}')
+    }
+  })
+
+  it('referencedFilenames authorizes exactly what rewriteMedia rewrites (M3 offset-0 src)', () => {
+    // A card whose first concatenated field begins with `src=` at offset 0 (no leading
+    // whitespace). The scan must NOT over-authorize relative to the rewriter: rewriteMedia
+    // only rewrites a `src` preceded by whitespace, so an offset-0 `src` it cannot reach must
+    // also be left unauthorized by referencedFilenames (otherwise media loads but never renders).
+    const body = 'src="lead.png"> middle <img src="mid.png">'
+    const refs = referencedFilenames([body])
+    const map = refs.map((f) => ({ filename: f, url: `fm://t/${f}` }))
+    const rewritten = rewriteMedia(body, map)
+
+    // The whitespace-preceded src IS authorized and IS rewritten.
+    expect(refs).toContain('mid.png')
+    expect(rewritten).toContain('fm://t/mid.png')
+
+    // The offset-0 src is NOT authorized (the rewriter would never touch it anyway).
+    expect(refs).not.toContain('lead.png')
+    // Consistency: every authorized filename actually appears rewritten in the output, so the
+    // scan never grants a media URL the iframe rewriter then fails to use.
+    for (const f of refs) {
+      expect(rewritten).toContain(`fm://t/${f}`)
+      expect(rewritten).not.toContain(`"${f}"`)
     }
   })
 

@@ -113,16 +113,23 @@ export interface CardSource {
 }
 
 // Filenames referenced from card content: <img src="…">, [sound:…], and CSS url(…).
-// `src` is anchored to start-or-whitespace (matching rewriteMedia's `\ssrc`) so attributes like
-// `data-src` are NOT treated as references — otherwise the scan and the rewriter would disagree.
-const MEDIA_REF_RE = /(?:(?:^|\s)src\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)\])|(?:url\(\s*["']?([^"')]+)["']?\s*\))/gi
+// `src` requires a PRECEDING WHITESPACE (`\ssrc`), mirroring rewriteMedia's `(\ssrc…)` rewrite
+// pattern so the scan and the iframe rewriter agree on whitespace-anchored `src` within a field
+// (and `data-src`/`*-src` are not treated as references). (M3)
+// Caveat: this scan joins parts with `\n` (below), so a `src` that *begins* a non-first part is
+// preceded by that synthetic separator and IS authorized here, even though rewriteMedia — which
+// runs per-field — would not rewrite an offset-0 `src`. That is a benign over-authorization: the
+// media row is still gated at serve time by deckSet + filename + content-hash + MIME, and such an
+// <img> wouldn't render either way. It never under-authorizes (every `src` the rewriter rewrites
+// is whitespace-preceded in the haystack too), so no real reference is missed.
+const MEDIA_REF_RE = /(?:\ssrc\s*=\s*["']([^"']+)["'])|(?:\[sound:([^\]]+)\])|(?:url\(\s*["']?([^"')]+)["']?\s*\))/gi
 // srcset="a.png 1x, b.png 2x" — captured whole, then split into candidate URLs below.
 const SRCSET_REF_RE = /\bsrcset\s*=\s*["']([^"']+)["']/gi
 
 // HTML-entity-decode the captured attribute value before lookup so it matches the decoded
 // `media.filename` stored at import (e.g. `a&amp;b.png` → `a&b.png`). MUST mirror rewriteMedia's
 // decode so the authorization scan and the iframe rewriter agree on the referenced filename.
-function referencedFilenames(parts: string[]): string[] {
+export function referencedFilenames(parts: string[]): string[] {
   const hay = parts.join('\n')
   const found = new Set<string>()
   MEDIA_REF_RE.lastIndex = 0

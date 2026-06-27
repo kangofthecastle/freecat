@@ -2,10 +2,18 @@
 import type { CardView } from '../dto'
 import { renderTemplate, type TemplateContext } from './template'
 
-/** Iframe-document CSP. default-src 'none' blocks fetch/XHR/connect (no connect-src);
- *  media is delivered subresource-only as <img src="freecat-media://…">. 'unsafe-eval'
- *  is required by MathJax (O5) and bounded by the opaque origin + no network. */
-export const IFRAME_CSP = "default-src 'none'; img-src freecat-media:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'"
+/** Iframe-document CSP (no-math baseline). default-src 'none' blocks fetch/XHR/connect (no
+ *  connect-src); media is delivered subresource-only as <img src="freecat-media://…">. The
+ *  height shim runs under 'unsafe-inline'; it needs no eval. 'unsafe-eval' is added ONLY for
+ *  math cards (see cspFor) — it is a MathJax-only (O5) requirement, so cards without math are
+ *  not granted eval at all. */
+export const IFRAME_CSP = "default-src 'none'; img-src freecat-media:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+
+/** Per-card CSP: only math cards get 'unsafe-eval' (required by MathJax, bounded by the opaque
+ *  origin + no network). Non-math cards run with 'unsafe-inline' alone. (M4) */
+export function cspFor(math: boolean): string {
+  return math ? `${IFRAME_CSP} 'unsafe-eval'` : IFRAME_CSP
+}
 
 const HEIGHT_SHIM =
   "<script>(function(){function p(){try{parent.postMessage({type:'fc-height'," +
@@ -108,10 +116,14 @@ export function buildCardHtml(view: CardView, side: 'question' | 'answer', mathj
   body = replaceSound(body)
   // Card CSS can reference media via url(…) — rewrite those to the same tokenized URLs.
   const css = rewriteMedia(view.css, view.mediaMap)
-  const math = mathjaxSrc && hasMath(body) ? mathjaxBlock(mathjaxSrc) : ''
+  // 'unsafe-eval' is granted iff the card actually contains math — independent of whether a
+  // MathJax source was supplied, since the CSP must permit eval before MathJax is ever injected
+  // (and a math card with no source still must not be silently downgraded to an eval-less policy).
+  const cardHasMath = hasMath(body)
+  const math = mathjaxSrc && cardHasMath ? mathjaxBlock(mathjaxSrc) : ''
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
-    `<meta http-equiv="Content-Security-Policy" content="${IFRAME_CSP}">` +
+    `<meta http-equiv="Content-Security-Policy" content="${cspFor(cardHasMath)}">` +
     `<style>${css}</style>${math}</head>` +
     `<body class="card"><div class="fc-card">${body}</div>${HEIGHT_SHIM}</body></html>`
   )

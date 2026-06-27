@@ -46,10 +46,28 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => win.show())
 
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  // Defense-in-depth navigation lockdown (M5): the renderer is a trusted local SPA, so the top
+  // frame must never navigate away and no child windows may open. Card content is untrusted but
+  // lives in a sandboxed <iframe> with its own strict CSP — this guards the privileged top frame.
+  // Deny every window.open / target=_blank / link-driven popup.
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (devUrl) {
+    // Dev: allow only the Vite dev-server origin (HMR navigates within it); block the rest.
+    const allowedOrigin = new URL(devUrl).origin
+    win.webContents.on('will-navigate', (e, url) => {
+      if (new URL(url).origin !== allowedOrigin) e.preventDefault()
+    })
+    win.loadURL(devUrl)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    // Prod: the app is loaded from a file:// URL; pin navigation to that exact document.
+    const indexHtml = join(__dirname, '../renderer/index.html')
+    const allowedUrl = new URL(`file://${indexHtml}`).href
+    win.webContents.on('will-navigate', (e, url) => {
+      if (url !== allowedUrl) e.preventDefault()
+    })
+    win.loadFile(indexHtml)
   }
 }
 
