@@ -14,7 +14,6 @@ export const lessonSchema = z.object({
   slug: z.string().min(1),
   title: z.string().min(1),
   summary: z.string().optional(),
-  order: z.number().int().optional(),
   bodyFile: z.string().optional(),
   sections: z.array(lessonSectionSchema).optional()
 })

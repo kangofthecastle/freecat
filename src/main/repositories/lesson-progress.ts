@@ -30,23 +30,25 @@ export async function setCompleted(
   now = new Date()
 ): Promise<{ newlyCompleted: boolean }> {
   const existing = await getProgressForSlug(db, slug)
-  if (!existing) {
-    await db.insert(lessonProgress).values({
+  const newlyCompleted = completed && !existing?.countedForReward
+  // Idempotent upsert keyed on the lesson_slug unique index (like markViewed), so
+  // two concurrent first-completions can't race the unique constraint. The conflict
+  // branch preserves an already-set completedAt and never un-counts a reward.
+  await db
+    .insert(lessonProgress)
+    .values({
       lessonSlug: slug,
       lastViewedAt: now,
       completedAt: completed ? now : null,
       countedForReward: completed
     })
-    return { newlyCompleted: completed }
-  }
-  const newlyCompleted = completed && !existing.countedForReward
-  await db
-    .update(lessonProgress)
-    .set({
-      completedAt: completed ? existing.completedAt ?? now : null,
-      countedForReward: existing.countedForReward || completed
+    .onConflictDoUpdate({
+      target: lessonProgress.lessonSlug,
+      set: {
+        completedAt: completed ? existing?.completedAt ?? now : null,
+        countedForReward: (existing?.countedForReward ?? false) || completed
+      }
     })
-    .where(eq(lessonProgress.id, existing.id))
   return { newlyCompleted }
 }
 

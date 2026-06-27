@@ -37,6 +37,23 @@ describe('scanContent — good tree', () => {
     expect(index.byId.get('bb-0001-q1')?.section).toBe('bio-biochem')
   })
 
+  it('derives the MCAT section for every discipline (all 6 of SECTION_BY_DISCIPLINE)', () => {
+    // SECTION_BY_DISCIPLINE / resolveTopic aren't exported, so we drive the full
+    // map through fixtures: one standalone question per discipline.
+    const index = scanContent(join(FIX, 'all-disciplines'))
+    expect(index.errors).toEqual([])
+    const section = (id: string): string | undefined => index.byId.get(id)?.section
+    // chem-phys disciplines: gen-chem, o-chem, physics.
+    expect(section('ad-gen-chem')).toBe('chem-phys')
+    expect(section('ad-o-chem')).toBe('chem-phys')
+    expect(section('ad-physics')).toBe('chem-phys')
+    // bio-biochem disciplines: biology, biochem.
+    expect(section('ad-biology')).toBe('bio-biochem')
+    expect(section('ad-biochem')).toBe('bio-biochem')
+    // psych-soc discipline: behavioral-sci (previously unasserted).
+    expect(section('ad-behavioral-sci')).toBe('psych-soc')
+  })
+
   it('stamps passageId and inherits the passage topic/discipline/section', () => {
     const index = scanContent(join(FIX, 'good'))
     const q1 = index.byId.get('bb-0001-q1')

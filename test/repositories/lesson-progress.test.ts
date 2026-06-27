@@ -29,6 +29,17 @@ describe('lesson-progress repository', () => {
     expect(b.newlyCompleted).toBe(false)
   })
 
+  it('setCompleted is idempotent for an unseen slug under concurrent first-completions', async () => {
+    // Two concurrent first-completions for a never-seen slug must not race the
+    // lesson_slug unique constraint (read-then-bare-INSERT would throw here).
+    await Promise.all([setCompleted(db, SLUG, true), setCompleted(db, SLUG, true)])
+    const rows = await getAllProgress(db)
+    expect(rows).toHaveLength(1) // exactly one row, no duplicate-key explosion
+    const [row] = rows
+    expect(row?.completedAt).not.toBeNull()
+    expect(row?.countedForReward).toBe(true)
+  })
+
   it('un-completing clears completedAt but never re-grants on re-complete', async () => {
     await setCompleted(db, SLUG, true)
     await setCompleted(db, SLUG, false)

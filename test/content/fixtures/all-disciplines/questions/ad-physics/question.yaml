@@ -1,0 +1,13 @@
+id: ad-physics
+topic: physics.mechanics
+tags:
+  - { vocab: aamc, code: '4A' }
+stem: 'What is the SI unit of force?'
+choices:
+  - 'Newton'
+  - 'Joule'
+  - 'Watt'
+  - 'Pascal'
+correct: A
+explanation: |
+  Force is measured in newtons (kg·m/s^2) in the SI system.
