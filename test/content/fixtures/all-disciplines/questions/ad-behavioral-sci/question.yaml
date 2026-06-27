@@ -1,0 +1,14 @@
+id: ad-behavioral-sci
+topic: behavioral-sci.learning-memory-cognition
+tags:
+  - { vocab: aamc, code: '6B' }
+stem: 'In classical conditioning, a previously neutral stimulus that comes to elicit a response is called what?'
+choices:
+  - 'Conditioned stimulus'
+  - 'Unconditioned stimulus'
+  - 'Unconditioned response'
+  - 'Primary reinforcer'
+correct: A
+explanation: |
+  After pairing with an unconditioned stimulus, the neutral stimulus becomes a
+  conditioned stimulus that elicits a conditioned response.

@@ -46,7 +46,10 @@ export function ChoiceList({
               type="button"
               disabled={locked}
               onClick={() => onSelect(letter)}
-              aria-pressed={isSelected}
+              // Once locked the buttons are disabled and no longer a toggle, so drop aria-pressed
+              // entirely — correctness is conveyed by the visually-hidden labels below, not by a
+              // residual pressed state (which would otherwise read out as a stale toggle).
+              aria-pressed={locked ? undefined : isSelected}
               className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition disabled:cursor-default ${tone}`}
             >
               <span
@@ -65,6 +68,9 @@ export function ChoiceList({
               <div className="min-w-0 flex-1">
                 <Markdown className="[&_p]:m-0">{body}</Markdown>
               </div>
+              {/* WCAG 1.4.1: correct/incorrect must not be conveyed by color alone. */}
+              {isCorrect && <span className="sr-only">Correct answer</span>}
+              {isWrongPick && <span className="sr-only">Your answer — incorrect</span>}
             </button>
           </li>
         )

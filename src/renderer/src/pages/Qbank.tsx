@@ -22,8 +22,10 @@ export default function Qbank(props: PageProps): React.JSX.Element {
   // Synchronous re-entry guard so a double-click can never fire two concurrent startSession
   // calls (which would create an orphaned qbank_session row).
   const startingRef = useRef(false)
-  // Fires the inbound topic deep-link at most once, even under StrictMode's double-effect.
-  const autoStartedRef = useRef(false)
+  // The topic slug we last auto-started for. Keyed on the slug (not a one-shot boolean) so a
+  // SECOND in-place deep-link to a DIFFERENT topic re-fires, while StrictMode's double-effect and
+  // payload-identity churn for the SAME slug stay deduped.
+  const lastStartedSlugRef = useRef<string | null>(null)
 
   const start = useCallback(async (input: StartSessionInput): Promise<void> => {
     if (startingRef.current) return
@@ -48,11 +50,13 @@ export default function Qbank(props: PageProps): React.JSX.Element {
   }, [])
 
   // Inbound cross-link: a topic deep-link (e.g. from a CR lesson's "Practice this topic")
-  // auto-starts a topic-scoped session instead of showing the Composer.
+  // auto-starts a topic-scoped session instead of showing the Composer. Fire only when the slug
+  // changes from the last one we started — set the ref synchronously (before the async start) so
+  // StrictMode's immediate second effect invocation sees the same slug already recorded and skips.
   useEffect(() => {
     const topicSlug = navPayload?.topicSlug
-    if (!topicSlug || autoStartedRef.current) return
-    autoStartedRef.current = true
+    if (!topicSlug || lastStartedSlugRef.current === topicSlug) return
+    lastStartedSlugRef.current = topicSlug
     void start({ scopeKind: 'topic', scopeCode: topicSlug, refine: 'all', count: DEEPLINK_COUNT })
   }, [navPayload, start])
 

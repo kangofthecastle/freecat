@@ -91,6 +91,20 @@ describe('buildCardHtml', () => {
     expect(buildCardHtml(mathCard, 'question')).not.toContain('window.MathJax') // no source → no inline
   })
 
+  it("emits 'unsafe-eval' in the CSP only when the card has math (M4)", () => {
+    // No-math card: script-src must not grant 'unsafe-eval' (MathJax-only requirement).
+    const noMath = buildCardHtml(view(), 'question')
+    const noMathCsp = /content="([^"]*)"/.exec(noMath)?.[1] ?? ''
+    expect(noMathCsp).toContain("script-src 'unsafe-inline'")
+    expect(noMathCsp).not.toContain("'unsafe-eval'")
+
+    // Math-containing card: 'unsafe-eval' is required for MathJax and must appear, even
+    // without a MathJax source supplied (the body still contains \(…\) after preprocessing).
+    const mathCard = view({ fields: [{ name: 'Front', value: '[$]x[/$]' }, { name: 'Back', value: '' }] })
+    const mathCsp = /content="([^"]*)"/.exec(buildCardHtml(mathCard, 'question'))?.[1] ?? ''
+    expect(mathCsp).toContain("'unsafe-eval'")
+  })
+
   it('disables $…$ and $$…$$ delimiters in the MathJax config', () => {
     const mathCard = view({ fields: [{ name: 'Front', value: '[$]x[/$]' }, { name: 'Back', value: '' }] })
     const html = buildCardHtml(mathCard, 'question', 'MJ')

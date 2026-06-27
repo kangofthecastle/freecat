@@ -1,0 +1,14 @@
+id: ad-o-chem
+topic: o-chem.intro
+tags:
+  - { vocab: aamc, code: '5D' }
+stem: 'Which hybridization does the carbon in methane (CH4) adopt?'
+choices:
+  - 'sp3'
+  - 'sp2'
+  - 'sp'
+  - 'sp3d'
+correct: A
+explanation: |
+  Methane has four sigma bonds and no lone pairs, giving the central carbon
+  sp3 hybridization and tetrahedral geometry.

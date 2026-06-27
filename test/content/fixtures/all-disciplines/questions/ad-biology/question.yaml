@@ -1,0 +1,14 @@
+id: ad-biology
+topic: biology.cellular-biology
+tags:
+  - { vocab: aamc, code: '2A' }
+stem: 'Which organelle is the primary site of ATP synthesis in eukaryotes?'
+choices:
+  - 'Mitochondrion'
+  - 'Nucleus'
+  - 'Golgi apparatus'
+  - 'Lysosome'
+correct: A
+explanation: |
+  Oxidative phosphorylation occurs at the inner mitochondrial membrane, making
+  the mitochondrion the cell's primary ATP producer.

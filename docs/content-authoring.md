@@ -2,7 +2,7 @@
 
 A lesson is one folder under `content/lessons/<discipline>/<topic-slug>/`:
 
-- `lesson.yaml` — `slug` (must match a taxonomy topic slug in `src/main/db/seed/taxonomy-data.ts`), `title`, optional `summary`, `order`, `bodyFile`.
+- `lesson.yaml` — `slug` (must match a taxonomy topic slug in `src/main/db/seed/taxonomy-data.ts`), `title`, optional `summary`, `bodyFile`.
 - `body.html` — the lesson, as **fully self-contained interactive HTML**.
 
 ## Rules
@@ -11,4 +11,4 @@ A lesson is one folder under `content/lessons/<discipline>/<topic-slug>/`:
 - **Cross-links** come from the taxonomy, not the lesson — tag the matching topic slug; the app supplies "Practice this topic" and related questions.
 
 ## Disciplines (v1)
-`gen-chem`, `o-chem`, `biology`, `biochem`, `behavioral-sci`. (Physics and CARS are out of v1.)
+`gen-chem`, `o-chem`, `physics`, `biology`, `biochem`, `behavioral-sci` — six disciplines. (CARS is out of scope; it has no authored content.)

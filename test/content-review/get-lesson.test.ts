@@ -5,7 +5,7 @@ import { createTestDb } from '../helpers/db'
 import { seedTaxonomy } from '../../src/main/repositories/taxonomy'
 import { LessonStore, type LessonRecord } from '../../src/main/content/lessons'
 import { CH } from '../../src/shared/channels'
-import type { LessonDetail } from '../../src/shared/dto'
+import type { LessonDetail, LessonRef, MarkCompleteResult, ServiceResult } from '../../src/shared/dto'
 
 // Electron's `ipcMain` is undefined under the node-env test process, so we capture
 // the handlers registered by registerContentReviewIpc into a map and invoke them
@@ -94,5 +94,67 @@ describe('getLesson aamcCategories', () => {
 
     const detail = await invoke<LessonDetail | null>(CH.contentGetLesson, 'not.a-real-topic')
     expect(detail).toBeNull()
+  })
+
+  it('returns null when the lesson is in the store but its topic is not in the taxonomy', async () => {
+    // store.get() succeeds (body on disk) but getTopicBySlug() fails because the
+    // slug was never seeded → the "no topic" guard short-circuits to null.
+    const { registerContentReviewIpc } = await import('../../src/main/ipc/content-review')
+    const db = await createTestDb()
+    await seedTaxonomy(db)
+    const store = new LessonStore([record('biochem.not-a-seeded-topic')])
+    registerContentReviewIpc(db, store)
+
+    const detail = await invoke<LessonDetail | null>(CH.contentGetLesson, 'biochem.not-a-seeded-topic')
+    expect(detail).toBeNull()
+  })
+})
+
+describe('lessonForTaxonomy handler', () => {
+  beforeEach(() => handlers.clear())
+
+  it('returns the ref when the topic exists and a lesson is authored', async () => {
+    const { registerContentReviewIpc } = await import('../../src/main/ipc/content-review')
+    const db = await createTestDb()
+    await seedTaxonomy(db)
+    const store = new LessonStore([record('biochem.enzymes')])
+    registerContentReviewIpc(db, store)
+
+    const ref = await invoke<LessonRef | null>(CH.contentLessonForTaxonomy, 'biochem.enzymes')
+    expect(ref).toEqual({ slug: 'biochem.enzymes', title: 'Enzymes', discipline: 'biochem' })
+  })
+
+  it('returns null when the topic exists but no lesson is authored', async () => {
+    // biochem.enzymes is a real seeded topic, but the store has no lesson for it
+    // → store.has() is false and the handler returns null (not a partial ref).
+    const { registerContentReviewIpc } = await import('../../src/main/ipc/content-review')
+    const db = await createTestDb()
+    await seedTaxonomy(db)
+    const store = new LessonStore([]) // no authored lessons
+    registerContentReviewIpc(db, store)
+
+    const ref = await invoke<LessonRef | null>(CH.contentLessonForTaxonomy, 'biochem.enzymes')
+    expect(ref).toBeNull()
+  })
+})
+
+describe('markComplete handler', () => {
+  beforeEach(() => handlers.clear())
+
+  it('markComplete(false) returns the derived (un-completed) status', async () => {
+    // completed:false routes through setCompleted(slug,false): it upserts a row
+    // whose completedAt is null, so deriveStatus yields the un-completed state.
+    const { registerContentReviewIpc } = await import('../../src/main/ipc/content-review')
+    const db = await createTestDb()
+    await seedTaxonomy(db)
+    const store = new LessonStore([record('biochem.enzymes')])
+    registerContentReviewIpc(db, store)
+
+    const res = await invoke<ServiceResult<MarkCompleteResult>>(CH.contentMarkComplete, {
+      slug: 'biochem.enzymes',
+      completed: false
+    })
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.data.status).toBe('in-progress') // un-completed: viewed/derived, not 'completed'
   })
 })

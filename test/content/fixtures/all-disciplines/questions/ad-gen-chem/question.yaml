@@ -1,0 +1,13 @@
+id: ad-gen-chem
+topic: gen-chem.atomic-theory
+tags:
+  - { vocab: aamc, code: '4E' }
+stem: 'How many protons does a neutral carbon-12 atom have?'
+choices:
+  - '6'
+  - '12'
+  - '8'
+  - '14'
+correct: A
+explanation: |
+  The atomic number of carbon is 6, so a neutral carbon atom has 6 protons.

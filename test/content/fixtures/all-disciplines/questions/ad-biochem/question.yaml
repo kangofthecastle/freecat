@@ -1,0 +1,14 @@
+id: ad-biochem
+topic: biochem.enzymes
+tags:
+  - { vocab: aamc, code: '1A' }
+stem: 'Enzymes increase reaction rate primarily by doing what?'
+choices:
+  - 'Lowering the activation energy'
+  - 'Increasing the equilibrium constant'
+  - 'Raising the temperature'
+  - 'Shifting equilibrium toward products'
+correct: A
+explanation: |
+  Enzymes are catalysts that lower the activation energy of a reaction without
+  altering the position of equilibrium.

@@ -70,6 +70,10 @@ export function SessionSummary({
                   className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-gray-50"
                 >
                   <span
+                    // WCAG 1.4.1: the glyph + color must also carry a text alternative for AT.
+                    role="img"
+                    aria-label={row.isCorrect ? 'Correct' : 'Incorrect'}
+                    title={row.isCorrect ? 'Correct' : 'Incorrect'}
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                       row.isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
                     }`}
