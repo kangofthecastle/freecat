@@ -6,6 +6,7 @@ import { CH } from '../../shared/channels'
 import { ok } from '../../shared/dto'
 import type { QuestionRef } from '../../shared/dto'
 import { planSession, gradeAndRecord, summarize } from '../qbank/sessions'
+import { completeSession } from '../repositories/qbank-sessions'
 import { toggleFlag } from '../repositories/qbank-flags'
 import { getDashboard } from '../repositories/qbank-analytics'
 
@@ -38,15 +39,29 @@ export const completeSessionSchema = z.number().int().positive()
 export const toggleFlagSchema = z.string().min(1).max(128)
 export const questionsForTaxonomySchema = z.string().min(1).max(128)
 
-export function registerQbankIpc(db: DB, index: ContentIndex): void {
+export interface QbankIpcOptions {
+  /** Injected clock for testability; defaults to wall-clock. */
+  now?: () => Date
+}
+
+export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOptions = {}): void {
+  const now = opts.now ?? (() => new Date())
   ipcMain.handle(CH.qbankStartSession, (_e, raw: unknown) =>
-    planSession(index, db, startSessionSchema.parse(raw), { now: new Date(), rng: Math.random }))
+    planSession(index, db, startSessionSchema.parse(raw), { now: now(), rng: Math.random }))
   ipcMain.handle(CH.qbankSubmitAnswer, (_e, raw: unknown) =>
-    gradeAndRecord(index, db, submitAnswerSchema.parse(raw), { now: new Date() }))
-  ipcMain.handle(CH.qbankCompleteSession, (_e, raw: unknown) =>
-    summarize(db, completeSessionSchema.parse(raw)))
+    gradeAndRecord(index, db, submitAnswerSchema.parse(raw), { now: now() }))
+  // Mark the session complete (writes completedAt; throws if the row is missing) AND return the
+  // summary the renderer expects. completeSession is the side-effect; summarize is the return value.
+  // A missing-session throw propagates as an IPC rejection — the renderer's completeSession is typed
+  // Promise<SessionSummary> and its caller (Session.tsx) catches and surfaces a retry, so we keep the
+  // raw-summary return shape rather than wrapping in a ServiceResult.
+  ipcMain.handle(CH.qbankCompleteSession, async (_e, raw: unknown) => {
+    const sessionId = completeSessionSchema.parse(raw)
+    await completeSession(db, sessionId, now())
+    return summarize(db, sessionId)
+  })
   ipcMain.handle(CH.qbankToggleFlag, async (_e, raw: unknown) =>
-    ok(await toggleFlag(db, toggleFlagSchema.parse(raw), new Date())))
+    ok(await toggleFlag(db, toggleFlagSchema.parse(raw), now())))
   ipcMain.handle(CH.qbankDashboard, () => getDashboard(db, index))
   ipcMain.handle(CH.qbankQuestionsForTaxonomy, (_e, raw: unknown): QuestionRef[] => {
     const topic = questionsForTaxonomySchema.parse(raw)

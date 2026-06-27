@@ -47,4 +47,8 @@ describe('qbank-sessions repository', () => {
     expect(done.completedAt?.getTime()).toBe(DONE.getTime())
     expect((await getSession(db, created.id))?.completedAt?.getTime()).toBe(DONE.getTime())
   })
+
+  it('completeSession rejects when the session row is missing', async () => {
+    await expect(completeSession(db, 99999, NOW)).rejects.toThrow(/not found/i)
+  })
 })
