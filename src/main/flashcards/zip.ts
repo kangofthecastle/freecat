@@ -4,6 +4,8 @@ import { readCentralDirectory, type ZipEntryMeta } from './central-dir'
 export const MAX_TOTAL_UNCOMPRESSED = 4 * 1024 * 1024 * 1024 // 4 GiB
 export const MAX_MEMBERS = 100_000
 export const MAX_PER_MEMBER = 2 * 1024 * 1024 * 1024          // 2 GiB
+/** On-disk ceiling for the archive we read into memory at all (A1 precheck via stat, before readFile). */
+export const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024       // 2 GiB
 
 export class ImportTooLargeError extends Error {}
 export class CorruptPackageError extends Error {}

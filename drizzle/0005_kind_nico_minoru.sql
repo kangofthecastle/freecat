@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `qbank_attempt_session_question_idx` ON `qbank_attempt` (`session_id`,`question_id`);

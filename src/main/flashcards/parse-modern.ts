@@ -4,18 +4,31 @@ import { createClient } from '@libsql/client'
 import type { ParsedCollection, ParsedNoteType, ParsedDeck, ParsedNote, ParsedCard, ParsedField, ParsedTemplate } from './parsed-collection'
 import { NotetypeConfig, TemplateConfig } from './anki-proto'
 import { ImportTooLargeError, CorruptPackageError } from './zip'
+import { chmodSync } from 'node:fs'
 
-export interface CollectionLimits { maxRows: number; maxFieldBytes: number }
+export interface CollectionLimits { maxRows: number; maxFieldBytes: number; maxTotalFieldBytes: number }
 /** Retained name (the modern parser's original export); now an alias of the shared {@link CollectionLimits}. */
 export type ModernLimits = CollectionLimits
-export const DEFAULT_LIMITS: CollectionLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024 }
+export const DEFAULT_LIMITS: CollectionLimits = { maxRows: 500_000, maxFieldBytes: 25 * 1024 * 1024, maxTotalFieldBytes: 256 * 1024 * 1024 }
 export const DEFAULT_MODERN_LIMITS = DEFAULT_LIMITS
 
 /**
+ * Open an UNTRUSTED collection file read-only. @libsql exposes no read-only flag and rejects
+ * `?mode=ro` / `immutable=1` URIs (URL_PARAM_NOT_SUPPORTED), so read-only is enforced at the OS
+ * level: chmod the (temp, app-owned) file to 0o444 before opening, which makes any write fail with
+ * SQLITE_READONLY regardless of how the SQLite engine opens it. The caller owns the temp file's
+ * lifecycle; unlink still works afterwards (it needs write permission on the directory, not the file).
+ */
+export function openCollectionReadOnly(path: string): Client {
+  chmodSync(path, 0o444)
+  return createClient({ url: `file:${path}` })
+}
+
+/**
  * Cheap pre-ETL amplification guards shared by both the legacy and modern parsers (design spec).
- * Rejects collections that declare more rows than `maxRows` in any materialized table, or a single
- * `notes.flds` larger than `maxFieldBytes`, before any row is pulled into JS. Pass only the tables
- * a given parser materializes (each must exist in that schema).
+ * Rejects collections that declare more rows than `maxRows` in any materialized table, a single
+ * `notes.flds` larger than `maxFieldBytes`, or summed `notes.flds` exceeding `maxTotalFieldBytes`,
+ * before any row is pulled into JS. Pass only the tables a given parser materializes (each must exist).
  */
 export async function assertCollectionWithinLimits(
   client: Client,
@@ -30,6 +43,11 @@ export async function assertCollectionWithinLimits(
   // cap matches `maxFieldBytes` for multibyte-heavy fields (LENGTH on TEXT counts characters).
   const maxFld = Number((await client.execute('SELECT COALESCE(MAX(LENGTH(CAST(flds AS BLOB))), 0) AS n FROM notes')).rows[0]?.n ?? 0)
   if (maxFld > limits.maxFieldBytes) throw new ImportTooLargeError('field too large')
+  // Aggregate bound: a collection can pass the per-field and row-count caps yet still sum to gigabytes
+  // of note text, which would OOM the main process once every row is materialized into JS strings/arrays.
+  // SUM(LENGTH(CAST(flds AS BLOB))) counts total UTF-8 bytes in SQLite, before any row is pulled.
+  const totalFld = Number((await client.execute('SELECT COALESCE(SUM(LENGTH(CAST(flds AS BLOB))), 0) AS n FROM notes')).rows[0]?.n ?? 0)
+  if (totalFld > limits.maxTotalFieldBytes) throw new ImportTooLargeError('collection field data too large')
 }
 
 const SEP = '\x1f' // 0x1F
@@ -44,13 +62,14 @@ function toBytes(v: unknown): Uint8Array {
 }
 
 /** Read a schema-18 collection (raw libsql) into the shared ParsedCollection. */
-export async function parseModernCollection(path: string, limits: CollectionLimits = DEFAULT_LIMITS): Promise<ParsedCollection> {
-  const client = createClient({ url: `file:${path}` })
+export async function parseModernCollection(path: string, limits: Partial<CollectionLimits> = {}): Promise<ParsedCollection> {
+  const lim = { ...DEFAULT_LIMITS, ...limits }
+  const client = openCollectionReadOnly(path)
   try {
     // Amplification guards before building DTOs — cover every table we fully materialize below,
     // so a pathological collection with millions of note-type/field/template/deck rows cannot
     // amplify within the 2 GiB decompression bound.
-    await assertCollectionWithinLimits(client, limits, ['notes', 'cards', 'notetypes', 'fields', 'templates', 'decks'])
+    await assertCollectionWithinLimits(client, lim, ['notes', 'cards', 'notetypes', 'fields', 'templates', 'decks'])
 
     const fieldsByNt = new Map<number, ParsedField[]>()
     for (const r of (await client.execute('SELECT ntid, ord, name FROM fields ORDER BY ntid, ord')).rows) {

@@ -27,6 +27,9 @@ export const qbankAttempt = sqliteTable('qbank_attempt', {
   timeMs: integer('time_ms'),
   answeredAt: integer('answered_at', { mode: 'timestamp' }).notNull()
 }, (t) => [
+  // One attempt row per question per session — a replayed/duplicate submit upserts (see recordAttempt)
+  // instead of inflating accuracy stats with a second row.
+  uniqueIndex('qbank_attempt_session_question_idx').on(t.sessionId, t.questionId),
   index('qbank_attempt_session_idx').on(t.sessionId),
   index('qbank_attempt_question_idx').on(t.questionId),
   index('qbank_attempt_section_idx').on(t.section),

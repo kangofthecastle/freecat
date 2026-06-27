@@ -1,7 +1,7 @@
 // test/flashcards/import.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'node:os'; import { join } from 'node:path'; import { randomUUID } from 'node:crypto'
-import { rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
+import { rmSync, mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { strToU8, zipSync } from 'fflate'
 
 // Mock electron's dialog so importViaDialog is unit-testable in a node environment. showOpenDialog
@@ -12,7 +12,7 @@ vi.mock('electron', () => ({ dialog: { showOpenDialog: () => showOpenDialog() } 
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import { buildLegacyApkg, type LegacySpec } from './fixtures/legacy'
-import { importFromFile, importViaDialog } from '../../src/main/flashcards/import'
+import { importFromFile, importViaDialog, removeTempCollection } from '../../src/main/flashcards/import'
 import { cards, media } from '../../src/main/db/schema'
 
 const MAX_PER_MEMBER = 2 * 1024 * 1024 * 1024 // mirror zip.ts cap
@@ -84,6 +84,21 @@ describe('importFromFile (legacy .apkg, end-to-end)', () => {
     const forged = forgeOversizedMember(apkg, 'collection.anki2', MAX_PER_MEMBER + 1)
     const file = join(dir, 'big.apkg'); writeFileSync(file, forged)
     expect(await importFromFile(db, file, join(dir, 'media'))).toEqual({ ok: false, error: 'import-too-large' })
+  })
+
+  it('rejects an archive larger than the on-disk size ceiling before reading it into memory', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec)
+    const file = join(dir, 'oversized.apkg'); writeFileSync(file, apkg)
+    // A ceiling one byte below the real file size must reject on the stat() precheck — before readFile.
+    const res = await importFromFile(db, file, join(dir, 'media'), { maxArchiveBytes: apkg.length - 1 })
+    expect(res).toEqual({ ok: false, error: 'import-too-large' })
+  })
+
+  it('imports a file exactly at the size ceiling (strict >, no off-by-one)', async () => {
+    const apkg = await buildLegacyApkg(minimalSpec)
+    const file = join(dir, 'atcap.apkg'); writeFileSync(file, apkg)
+    const res = await importFromFile(db, file, join(dir, 'media'), { maxArchiveBytes: apkg.length })
+    expect(res.ok).toBe(true)
   })
 
   it('maps an Anki-shaped zip with a garbage collection member to corrupt-package', async () => {
@@ -168,5 +183,21 @@ describe('importViaDialog (envelope around the open dialog)', () => {
     showOpenDialog.mockRejectedValue(new Error('window destroyed mid-dialog'))
     // Must resolve to a ServiceResult, not reject — the importDeck channel never throws (design spec).
     await expect(importViaDialog(db, join(dir, 'media'))).resolves.toEqual({ ok: false, error: 'invalid' })
+  })
+})
+
+describe('removeTempCollection', () => {
+  it('deletes the collection temp file and its -wal/-shm sidecars (read-only WAL leaves these behind)', async () => {
+    const base = join(dir, `c-${randomUUID()}.anki2`)
+    for (const p of [base, `${base}-wal`, `${base}-shm`]) writeFileSync(p, strToU8('x'))
+    await removeTempCollection(base)
+    for (const p of [base, `${base}-wal`, `${base}-shm`]) expect(existsSync(p)).toBe(false)
+  })
+
+  it('does not throw when the sidecars are absent (rollback-journal collection)', async () => {
+    const base = join(dir, `c-${randomUUID()}.anki2`)
+    writeFileSync(base, strToU8('x')) // main file only, no sidecars
+    await expect(removeTempCollection(base)).resolves.toBeUndefined()
+    expect(existsSync(base)).toBe(false)
   })
 })

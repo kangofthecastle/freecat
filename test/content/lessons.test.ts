@@ -58,4 +58,20 @@ describe('LessonStore', () => {
     const rec = { slug: 'dup.x', title: 'X', dir: '/tmp/x', bodyFile: 'body.html' }
     expect(() => new LessonStore([rec, { ...rec, dir: '/tmp/y' }])).toThrow(/Duplicate/)
   })
+
+  it('throws when a lesson slug matches no taxonomy topic (validation enabled)', () => {
+    const rec = { slug: 'not.a-real-topic', title: 'X', dir: '/tmp/x', bodyFile: 'body.html' }
+    const validTopics = new Set(['biochem.enzymes', 'gen-chem.thermo-kinetics-gas'])
+    expect(() => new LessonStore([rec], validTopics)).toThrow(/taxonomy topic/)
+  })
+
+  it('accepts a lesson whose slug is a known taxonomy topic', () => {
+    const rec = { slug: 'biochem.enzymes', title: 'Enzymes', dir: '/tmp/x', bodyFile: 'body.html' }
+    expect(() => new LessonStore([rec], new Set(['biochem.enzymes']))).not.toThrow()
+  })
+
+  it('skips slug validation when no taxonomy set is provided (back-compat)', () => {
+    const rec = { slug: 'whatever.unknown', title: 'X', dir: '/tmp/x', bodyFile: 'body.html' }
+    expect(() => new LessonStore([rec])).not.toThrow()
+  })
 })

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import { qbankAttempt, type QbankAttemptRow } from '../db/schema'
 import type { ChoiceLetter } from '../../shared/dto'
@@ -17,7 +17,11 @@ export interface RecordAttemptParams {
 }
 
 export async function recordAttempt(db: DB, p: RecordAttemptParams): Promise<QbankAttemptRow> {
-  const [row] = await db.insert(qbankAttempt).values({
+  // Idempotent per (sessionId, questionId): a replayed or duplicated submit (double-click, renderer
+  // remount, any caller bypassing the UI latch) overwrites the prior answer instead of appending a
+  // second row that would inflate summarize()/dashboard counts. Backed by the unique index
+  // qbank_attempt_session_question_idx.
+  const values = {
     sessionId: p.sessionId,
     questionId: p.questionId,
     passageId: p.passageId,
@@ -28,9 +32,33 @@ export async function recordAttempt(db: DB, p: RecordAttemptParams): Promise<Qba
     isCorrect: p.isCorrect,
     timeMs: p.timeMs ?? null,
     answeredAt: p.now
+  }
+  const [row] = await db.insert(qbankAttempt).values(values).onConflictDoUpdate({
+    target: [qbankAttempt.sessionId, qbankAttempt.questionId],
+    set: {
+      passageId: values.passageId,
+      topic: values.topic,
+      discipline: values.discipline,
+      section: values.section,
+      chosen: values.chosen,
+      isCorrect: values.isCorrect,
+      timeMs: values.timeMs,
+      answeredAt: values.answeredAt
+    }
   }).returning()
-  if (!row) throw new Error('recordAttempt failed to insert')
+  if (!row) throw new Error('recordAttempt failed to upsert')
   return row
+}
+
+/** Whether an attempt already exists for this (session, question). Used by gradeAndRecord to avoid
+ *  re-awarding gamification on a replayed/duplicate submit (the attempt row itself is upserted). */
+export async function attemptExists(db: DB, sessionId: number, questionId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: qbankAttempt.id })
+    .from(qbankAttempt)
+    .where(and(eq(qbankAttempt.sessionId, sessionId), eq(qbankAttempt.questionId, questionId)))
+    .limit(1)
+  return row !== undefined
 }
 
 export async function getSessionAttempts(db: DB, sessionId: number): Promise<QbankAttemptRow[]> {

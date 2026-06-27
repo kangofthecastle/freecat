@@ -1,5 +1,5 @@
 // src/main/flashcards/import.ts
-import { readFile, writeFile, unlink } from 'node:fs/promises'
+import { readFile, writeFile, unlink, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, basename } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -10,7 +10,7 @@ import { ok, err } from '../../shared/dto'
 import type { ParsedCollection } from './parsed-collection'
 import { readCentralDirectory } from './central-dir'
 import { detectFormat } from './detect'
-import { extractMembers, ImportTooLargeError, CorruptPackageError } from './zip'
+import { extractMembers, ImportTooLargeError, CorruptPackageError, MAX_ARCHIVE_BYTES } from './zip'
 import { parseLegacyCollection } from './parse-legacy'
 import { parseModernCollection } from './parse-modern'
 import { parseModernMedia } from './modern-media'
@@ -39,8 +39,23 @@ function legacyMedia(members: Record<string, Uint8Array>): Record<string, Uint8A
   return mediaFiles
 }
 
+/** Remove a parsed collection temp file plus the -wal/-shm sidecars a read-only WAL open can leave
+ *  behind (a read-only connection cannot checkpoint them away on close). Best-effort. */
+export async function removeTempCollection(tmpPath: string): Promise<void> {
+  await Promise.all(
+    [tmpPath, `${tmpPath}-wal`, `${tmpPath}-shm`].map((p) => unlink(p).catch(() => { /* ignore */ }))
+  )
+}
+
 /** Import a deck package from a path into the db, persisting media under mediaDir. No dialog (unit-testable). */
-export async function importFromFile(db: DB, filePath: string, mediaDir: string): Promise<ServiceResult<DeckSetSummary>> {
+export async function importFromFile(db: DB, filePath: string, mediaDir: string, opts?: { maxArchiveBytes?: number }): Promise<ServiceResult<DeckSetSummary>> {
+  // Precheck the on-disk size before readFile so a multi-GB archive can't force that many bytes resident
+  // in one Buffer (OOM). A failing stat() (e.g. ENOENT) maps to corrupt-package, matching the readFile catch.
+  const maxArchiveBytes = opts?.maxArchiveBytes ?? MAX_ARCHIVE_BYTES
+  let size: number
+  try { size = (await stat(filePath)).size } catch { return err('corrupt-package') }
+  if (size > maxArchiveBytes) return err('import-too-large')
+
   let buf: Uint8Array
   try { buf = await readFile(filePath) } catch { return err('corrupt-package') }
 
@@ -81,7 +96,7 @@ export async function importFromFile(db: DB, filePath: string, mediaDir: string)
     if (e instanceof ImportTooLargeError) return err('import-too-large')
     return err('corrupt-package')
   } finally {
-    await unlink(tmpPath).catch(() => { /* ignore */ })
+    await removeTempCollection(tmpPath)
   }
 
   // Resolve media (modern: protobuf manifest + raw blobs; legacy: JSON map), then store on disk.

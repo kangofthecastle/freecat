@@ -7,7 +7,7 @@ import type {
 } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import { createSession } from '../repositories/qbank-sessions'
-import { recordAttempt, latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
+import { recordAttempt, attemptExists, latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
 import { listFlaggedIds } from '../repositories/qbank-flags'
 import { recordActivity } from '../repositories/activity'
 
@@ -148,6 +148,10 @@ export async function gradeAndRecord(
   if (!q) return err('not-found')
 
   const isCorrect = q.correct === input.choice
+  // A replayed/duplicate submit (double-click, renderer remount, any caller bypassing the UI latch)
+  // upserts the attempt below but must NOT re-award gamification. Detect a prior attempt for this
+  // (session, question) before the upsert; only a genuinely new answer credits activity.
+  const alreadyAnswered = await attemptExists(db, input.sessionId, q.id)
   await recordAttempt(db, {
     sessionId: input.sessionId,
     questionId: q.id,
@@ -161,18 +165,21 @@ export async function gradeAndRecord(
     now: opts.now
   })
 
-  // Gamification is a side-effect, in its own transaction — never block or fail grading on it.
+  // Gamification is a side-effect, in its own transaction — never block or fail grading on it, and
+  // credit it only on the first answer for this question (a replay must not double-award coins/xp/streak).
   let activity: SubmitAnswerResult['activity'] = null
-  const record = opts.recordActivityFn ?? recordActivity
-  try {
-    const res = await record(db, {
-      kind: 'qbank.answer',
-      taxonomyRef: q.topic,
-      now: opts.now
-    })
-    if (res.ok) activity = res.data
-  } catch {
-    activity = null
+  if (!alreadyAnswered) {
+    const record = opts.recordActivityFn ?? recordActivity
+    try {
+      const res = await record(db, {
+        kind: 'qbank.answer',
+        taxonomyRef: q.topic,
+        now: opts.now
+      })
+      if (res.ok) activity = res.data
+    } catch {
+      activity = null
+    }
   }
 
   return ok({

@@ -2,8 +2,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'; import { join } from 'node:path'; import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
+import { createClient } from '@libsql/client'
 import { writeModernCollection, type ModernSpec } from './fixtures/modern'
-import { parseModernCollection } from '../../src/main/flashcards/parse-modern'
+import { parseModernCollection, openCollectionReadOnly } from '../../src/main/flashcards/parse-modern'
 import { ImportTooLargeError } from '../../src/main/flashcards/zip'
 
 const spec: ModernSpec = {
@@ -64,5 +65,32 @@ describe('parseModernCollection', () => {
     await expect(parseModernCollection(path, { maxRows: 1000, maxFieldBytes: 8 })).rejects.toBeInstanceOf(ImportTooLargeError)
     // and a byte cap above the real byte length passes.
     await expect(parseModernCollection(path, { maxRows: 1000, maxFieldBytes: 64 })).resolves.toBeTruthy()
+  })
+
+  it('rejects a collection whose TOTAL field bytes exceed the aggregate budget (each field small)', async () => {
+    await writeModernCollection(path, spec) // 2 small notes; each field is well under maxFieldBytes
+    // Aggregate cap below the summed field bytes → reject, even though no single field is over the cap.
+    await expect(parseModernCollection(path, { maxTotalFieldBytes: 5 })).rejects.toBeInstanceOf(ImportTooLargeError)
+    // A generous aggregate cap passes.
+    await expect(parseModernCollection(path, { maxTotalFieldBytes: 10_000_000 })).resolves.toBeTruthy()
+  })
+})
+
+describe('openCollectionReadOnly', () => {
+  it('allows reads but rejects writes against an untrusted collection file (OS-enforced read-only)', async () => {
+    const p = join(tmpdir(), `fc-ro-${randomUUID()}.anki2`)
+    const w = createClient({ url: `file:${p}` })
+    await w.execute('CREATE TABLE t (x INTEGER)')
+    await w.execute('INSERT INTO t (x) VALUES (1)')
+    w.close()
+
+    const ro = openCollectionReadOnly(p)
+    try {
+      expect((await ro.execute('SELECT x FROM t')).rows).toHaveLength(1)
+      await expect(ro.execute('INSERT INTO t (x) VALUES (2)')).rejects.toThrow(/READONLY/i)
+    } finally {
+      ro.close()
+      rmSync(p, { force: true })
+    }
   })
 })

@@ -57,10 +57,17 @@ export class LessonStore {
   private bySlug: Map<string, LessonRecord>
   private bodyCache = new Map<string, string>()
 
-  constructor(records: LessonRecord[]) {
+  constructor(records: LessonRecord[], validTopicSlugs?: ReadonlySet<string>) {
     this.bySlug = new Map()
     for (const r of records) {
       if (this.bySlug.has(r.slug)) throw new Error(`Duplicate lesson slug: ${r.slug} (${r.dir})`)
+      // When the taxonomy slug set is supplied, fail loud on a lesson whose slug is not a known topic
+      // (the lesson-slug === topic-slug invariant). Without this, such a lesson loads but is invisible
+      // and unreachable: composeOutline keys lookups on topic slugs and contentGetLesson requires a
+      // matching topic, so a typo'd slug would silently vanish with no error.
+      if (validTopicSlugs && !validTopicSlugs.has(r.slug)) {
+        throw new Error(`Lesson slug "${r.slug}" matches no taxonomy topic (${r.dir})`)
+      }
       this.bySlug.set(r.slug, r)
     }
   }
@@ -85,6 +92,11 @@ export class LessonStore {
   }
 }
 
-export function createLessonStore(root: string): LessonStore {
-  return new LessonStore(loadLessons(root))
+/**
+ * Build a LessonStore from the on-disk content tree. Production callers MUST pass the taxonomy
+ * topic-slug set so the lesson-slug === topic-slug invariant is enforced (see index.ts); omitting it
+ * (tests/fixtures that exercise the runtime null path) skips validation.
+ */
+export function createLessonStore(root: string, validTopicSlugs?: ReadonlySet<string>): LessonStore {
+  return new LessonStore(loadLessons(root), validTopicSlugs)
 }
