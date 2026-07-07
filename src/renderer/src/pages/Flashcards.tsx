@@ -99,6 +99,9 @@ function DeckSetBlock({ ds, selectedDeckId, onSelectDeck, onDeleted }: {
   onDeleted: () => void
 }): React.JSX.Element {
   const [decks, setDecks] = useState<DeckNode[] | null>(null)
+  // Deleting an import is irreversible (cards + scheduling in later milestones), so the ✕ arms an
+  // inline confirm instead of deleting on the first click.
+  const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -118,7 +121,14 @@ function DeckSetBlock({ ds, selectedDeckId, onSelectDeck, onDeleted }: {
     <div>
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-xs font-semibold uppercase tracking-wide text-gray-400" title={ds.sourceFilename}>{ds.sourceFilename}</span>
-        <button onClick={onDelete} title="Delete this import" className="text-gray-300 hover:text-red-500">✕</button>
+        {confirming ? (
+          <span className="flex shrink-0 items-center gap-1">
+            <button onClick={onDelete} className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-red-700">Delete</button>
+            <button onClick={() => setConfirming(false)} className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-gray-100">Cancel</button>
+          </span>
+        ) : (
+          <button onClick={() => setConfirming(true)} title="Delete this import" className="text-gray-300 hover:text-red-500">✕</button>
+        )}
       </div>
       <div className="mt-1">
         {decks === null

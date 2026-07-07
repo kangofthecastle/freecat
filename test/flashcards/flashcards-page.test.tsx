@@ -125,4 +125,27 @@ describe('Flashcards page', () => {
     fireEvent.click(await screen.findByText(/Import deck/i))
     await screen.findByText('deck.apkg')
   })
+
+  it('deleting an import requires an inline confirm (✕ arms, Cancel disarms, Delete deletes)', async () => {
+    let deletes = 0
+    let sets: DeckSetSummary[] = [ds]
+    stub({
+      listDeckSets: async () => sets,
+      listDecks: async () => tree,
+      deleteDeckSet: async () => { deletes++; sets = []; return { ok: true, data: null } }
+    })
+    render(<Flashcards />)
+    // First click only arms the confirm.
+    fireEvent.click(await screen.findByTitle('Delete this import'))
+    expect(deletes).toBe(0)
+    // Cancel disarms without deleting.
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByText('Delete')).toBeNull()
+    expect(deletes).toBe(0)
+    // Arm again and confirm: the set is deleted and the list refreshes to empty.
+    fireEvent.click(screen.getByTitle('Delete this import'))
+    fireEvent.click(screen.getByText('Delete'))
+    await screen.findByText(/No decks yet/i)
+    expect(deletes).toBe(1)
+  })
 })

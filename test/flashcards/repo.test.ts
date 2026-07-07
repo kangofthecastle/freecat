@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
 import { writeCollection } from '../../src/main/flashcards/etl'
+import { storeMedia } from '../../src/main/flashcards/media-store'
 import { listDeckSets, listDecks, listCards, deleteDeckSet, referencedFilenames } from '../../src/main/repositories/flashcards'
 import { rewriteMedia } from '../../src/shared/flashcards/render'
 import type { ParsedCollection } from '../../src/main/flashcards/parsed-collection'
@@ -119,5 +123,64 @@ describe('flashcards repository', () => {
     expect(await deleteDeckSet(db, ds.id)).toEqual({ ok: true, data: null })
     expect(await listDeckSets(db)).toHaveLength(0)
     expect(await deleteDeckSet(db, ds.id)).toEqual({ ok: false, error: 'deck-set-not-found' })
+  })
+
+  it("deleteDeckSet unlinks the set's media blobs, keeping any blob another set still references", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-media-'))
+    try {
+      // ds1 references a unique blob and a shared blob; ds2 references only the shared one
+      // (storeMedia dedupes on disk by content hash, so both sets point at the same file).
+      const stored1 = storeMedia(dir, { 'only.png': new Uint8Array([1, 2, 3]), 'shared.png': new Uint8Array([9, 9]) })
+      const stored2 = storeMedia(dir, { 'shared.png': new Uint8Array([9, 9]) })
+      const ds1 = await writeCollection(db, { sourceFilename: 'a.apkg', sourceFormat: 'legacy1', parsed: make(1), media: stored1 })
+      const ds2 = await writeCollection(db, { sourceFilename: 'b.apkg', sourceFormat: 'legacy1', parsed: make(1), media: stored2 })
+      const path = (m: { hash: string; ext: string }): string => join(dir, `${m.hash}${m.ext}`)
+
+      expect(await deleteDeckSet(db, ds1.id, dir)).toEqual({ ok: true, data: null })
+      expect(existsSync(path(stored1['only.png']!))).toBe(false) // unique to ds1 → removed
+      expect(existsSync(path(stored1['shared.png']!))).toBe(true) // ds2 still references it
+
+      expect(await deleteDeckSet(db, ds2.id, dir)).toEqual({ ok: true, data: null })
+      expect(existsSync(path(stored1['shared.png']!))).toBe(false) // last reference gone
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('deleteDeckSet never unlinks through a poisoned hash/ext (no traversal)', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'fc-media-'))
+    try {
+      const mediaDir = join(base, 'media')
+      mkdirSync(mediaDir)
+      const secret = join(base, 'secret.png')
+      writeFileSync(secret, new Uint8Array([7]))
+      // A media row whose hash escapes mediaDir; the cleanup's shape check must refuse it.
+      const ds = await writeCollection(db, {
+        sourceFilename: 'evil.apkg', sourceFormat: 'legacy1', parsed: make(1),
+        media: { 'x.png': { hash: '../secret', ext: '.png' } }
+      })
+      expect(await deleteDeckSet(db, ds.id, mediaDir)).toEqual({ ok: true, data: null })
+      expect(existsSync(secret)).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('listCards preview truncates on code points, never splitting a surrogate pair', async () => {
+    const long = '🧬'.repeat(150) // 150 code points = 300 UTF-16 units
+    const ds = await writeCollection(db, {
+      sourceFilename: 'emoji.apkg', sourceFormat: 'legacy1',
+      parsed: {
+        noteTypes: [{ ankiId: 1, name: 'Basic', kind: 'standard', css: '', fields: [{ ord: 0, name: 'Front' }], templates: [{ ord: 0, name: 'C', qfmt: '{{Front}}', afmt: '{{Front}}' }] }],
+        decks: [{ ankiId: 1, name: 'D' }],
+        notes: [{ ankiId: 100, guid: 'g', noteTypeAnkiId: 1, fields: [long], tags: [], sortField: long }],
+        cards: [{ noteAnkiId: 100, deckAnkiId: 1, ord: 0 }]
+      }
+    })
+    const deck = (await listDecks(db, ds.id))[0]
+    if (!deck) throw new Error('no deck')
+    const preview = (await listCards(db, { deckId: deck.deckId })).cards[0]?.preview ?? ''
+    expect(preview).toBe(`${'🧬'.repeat(100)}…`)
+    expect(preview).not.toContain('�')
   })
 })
