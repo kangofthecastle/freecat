@@ -2,7 +2,7 @@
 
 An open-source, **local-first** MCAT study app. Free to download, runs entirely on your own machine, no account and no server required.
 
-> **Status: design phase.** There is no application code yet. This repository currently holds the project's design documents. Start with the charter linked below.
+> **Status: in development.** The app skeleton (Electron + React + SQLite), Gamification, Content Review, Qbank M1, and Flashcards M1 (Anki import + browse + render) are built and tested on `main`. Flashcards spaced repetition (FSRS), audio playback, image occlusion, and packaged installers are still to come. Start with the charter linked below.
 
 ## What it is
 
@@ -22,9 +22,23 @@ All progress lives in a single local SQLite file. FreeCAT is distributed as a on
 | Path | What |
 | --- | --- |
 | `docs/freecat-charter.md` | Project charter — vision, architecture, shared contracts, build order |
-| `docs/handoffs/` | Per-module kickoff briefs — authored once the Foundation is planned |
-| `docs/superpowers/specs/` | Detailed design specs (Foundation first) |
+| `docs/handoffs/` | Per-module kickoff briefs |
+| `docs/superpowers/specs/` | Detailed design specs, one per module/milestone |
+| `docs/superpowers/plans/` | Implementation plans executed against those specs |
+| `src/main/` | Electron main process — DB, IPC, content pipeline, Anki import |
+| `src/renderer/` | React UI |
+| `src/preload/` · `src/shared/` | IPC bridge and shared types/logic |
+| `test/` | Vitest suites (`npm test`) |
 | `content/` | Authored question / lesson content (YAML + Markdown + images) |
+
+## Developing
+
+```sh
+npm install
+npm run dev        # launch the app with hot reload
+npm test           # run the test suite
+npm run typecheck  # tsc --noEmit
+```
 
 ## Licensing
 

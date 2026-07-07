@@ -29,5 +29,5 @@ export function registerFlashcardsIpc(db: DB): void {
     const token = mintMediaToken(res.data.deckSetId)
     return ok(toCardView(res.data, token))
   })
-  ipcMain.handle(CH.fcDeleteDeckSet, (_e, raw: unknown) => deleteDeckSet(db, deckSetIdSchema.parse(raw)))
+  ipcMain.handle(CH.fcDeleteDeckSet, (_e, raw: unknown) => deleteDeckSet(db, deckSetIdSchema.parse(raw), flashcardsMediaDir()))
 }

@@ -1,3 +1,5 @@
+import { unlink } from 'node:fs/promises'
+import { join } from 'node:path'
 import { eq, and, gt, asc, inArray, sql } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import { deckSets, decks, noteTypes, noteTypeFields, templates, notes, cards, media } from '../db/schema'
@@ -55,7 +57,10 @@ function preview(sortField: string): string {
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return text.length > 100 ? `${text.slice(0, 100)}…` : text
+  // Truncate on code points, not UTF-16 units — String.slice can split a surrogate pair
+  // (e.g. an emoji at the boundary) and paint a replacement character before the ellipsis.
+  const points = [...text]
+  return points.length > 100 ? `${points.slice(0, 100).join('')}…` : text
 }
 
 export async function listCards(db: DB, input: ListCardsInput): Promise<CardListPage> {
@@ -75,9 +80,35 @@ export async function listCards(db: DB, input: ListCardsInput): Promise<CardList
   return { cards: items, nextAfterId }
 }
 
-export async function deleteDeckSet(db: DB, deckSetId: number): Promise<ServiceResult<null>> {
+// Same shape media-protocol enforces at serve time: only a lowercase-hex hash and a plain dotted
+// extension may participate in an on-disk path (a poisoned row must never become a traversal).
+const FILE_HASH_RE = /^[0-9a-f]+$/
+const FILE_EXT_RE = /^(\.[0-9a-z]+)?$/
+
+/** Unlink the deleted set's media blobs, keeping any blob still referenced by a remaining media row
+ *  (blobs are content-hash deduped across deck sets). Best-effort: a failed unlink is ignored. */
+async function removeOrphanedMediaFiles(
+  db: DB,
+  mediaDir: string,
+  candidates: { hash: string; ext: string }[]
+): Promise<void> {
+  const remaining = await db.selectDistinct({ hash: media.hash, ext: media.ext }).from(media)
+  const alive = new Set(remaining.map((r) => `${r.hash}${r.ext.toLowerCase()}`))
+  await Promise.all(candidates.map(async (c) => {
+    const ext = c.ext.toLowerCase()
+    if (!FILE_HASH_RE.test(c.hash) || !FILE_EXT_RE.test(ext)) return
+    const name = `${c.hash}${ext}`
+    if (alive.has(name)) return
+    await unlink(join(mediaDir, name)).catch(() => { /* already gone / locked — leave it */ })
+  }))
+}
+
+export async function deleteDeckSet(db: DB, deckSetId: number, mediaDir?: string): Promise<ServiceResult<null>> {
   const [existing] = await db.select({ id: deckSets.id }).from(deckSets).where(eq(deckSets.id, deckSetId))
   if (!existing) return err('deck-set-not-found')
+  // Snapshot this set's blob identities before the rows vanish; cleanup runs after the commit.
+  const doomed = await db.selectDistinct({ hash: media.hash, ext: media.ext })
+    .from(media).where(eq(media.deckSetId, deckSetId))
   await db.transaction(async (tx) => {
     const nts = await tx.select({ id: noteTypes.id }).from(noteTypes).where(eq(noteTypes.deckSetId, deckSetId))
     const ntIds = nts.map((n) => n.id)
@@ -92,6 +123,11 @@ export async function deleteDeckSet(db: DB, deckSetId: number): Promise<ServiceR
     await tx.delete(decks).where(eq(decks.deckSetId, deckSetId))
     await tx.delete(deckSets).where(eq(deckSets.id, deckSetId))
   })
+  // Disk cleanup is best-effort and post-commit: the rows are gone either way, and a leftover blob
+  // is only wasted space (it can never be served — no media row authorizes it anymore).
+  if (mediaDir !== undefined && doomed.length > 0) {
+    try { await removeOrphanedMediaFiles(db, mediaDir, doomed) } catch { /* keep the delete's success */ }
+  }
   return ok(null)
 }
 

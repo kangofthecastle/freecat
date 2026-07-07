@@ -5,7 +5,7 @@ import { ImportTooLargeError } from './zip'
 interface RawModel { id: number | string; name: string; type: number; css?: string; flds: { name: string; ord: number }[]; tmpls: { name: string; ord: number; qfmt: string; afmt: string }[] }
 interface RawDeck { id: number | string; name: string }
 
-const SEP = ''
+const SEP = '\x1f' // same 0x1F field separator the modern (schema-18) parser uses
 
 /** Read a legacy collection.anki2 (raw libsql, NOT drizzle) into a ParsedCollection. */
 export async function parseLegacyCollection(collectionPath: string, limits: Partial<CollectionLimits> = {}): Promise<ParsedCollection> {
