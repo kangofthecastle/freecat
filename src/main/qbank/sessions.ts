@@ -9,12 +9,14 @@ import { ok, err } from '../../shared/dto'
 import { createSession } from '../repositories/qbank-sessions'
 import { recordAttempt, attemptExists, latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
 import { listFlaggedIds } from '../repositories/qbank-flags'
-import { recordActivity } from '../repositories/activity'
+import { creditActivitySafely, type RecordActivityFn } from '../repositories/activity'
 
 export type Rng = () => number // [0,1)
 export interface PlanOptions { now: Date; rng: Rng }
 
-export type RecordActivityFn = typeof recordActivity
+// Re-exported (not re-declared) from the activity repo, which owns the injectable-recorder seam.
+// Kept as a named export here because existing importers/tests reference `RecordActivityFn` from this module.
+export type { RecordActivityFn }
 export interface GradeOptions { now: Date; recordActivityFn?: RecordActivityFn }
 
 /** Eligible question ids for the requested scope (mixed → everything). */
@@ -169,17 +171,7 @@ export async function gradeAndRecord(
   // credit it only on the first answer for this question (a replay must not double-award coins/xp/streak).
   let activity: SubmitAnswerResult['activity'] = null
   if (!alreadyAnswered) {
-    const record = opts.recordActivityFn ?? recordActivity
-    try {
-      const res = await record(db, {
-        kind: 'qbank.answer',
-        taxonomyRef: q.topic,
-        now: opts.now
-      })
-      if (res.ok) activity = res.data
-    } catch {
-      activity = null
-    }
+    activity = await creditActivitySafely(db, { kind: 'qbank.answer', taxonomyRef: q.topic, now: opts.now }, opts.recordActivityFn)
   }
 
   return ok({

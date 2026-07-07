@@ -3,10 +3,10 @@ import { getTableColumns } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import { cards, decks, cardScheduling, reviewLog } from '../db/schema'
 import type { CardSchedulingRow } from '../db/schema'
-import type { ReviewCounts, RatingPreview, ReviewCardResult, ServiceResult } from '../../shared/dto'
+import type { ReviewCounts, RatingPreview, ReviewCardResult, ReviewRating, ServiceResult } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
-import { State, applyRating, previewIntervals, type ReviewRating } from '../flashcards/fsrs'
-import { recordActivity, appTz } from './activity'
+import { State, applyRating, previewIntervals } from '../flashcards/fsrs'
+import { creditActivitySafely, appTz, type RecordActivityFn } from './activity'
 import { dayKeyInTz } from '../../shared/gamification/dates'
 
 // New cards introduced per day, per studied deck subtree (no settings UI in M2). Bucketed by the
@@ -23,8 +23,6 @@ export const LEARN_AHEAD_MS = 20 * 60 * 1000
 // becomes renderable in a later milestone — no data migration needed.
 const REVIEWABLE = ['basic', 'cloze'] as const
 const LEARNING_STATES = [State.Learning, State.Relearning]
-
-export type RecordActivityFn = typeof recordActivity
 
 /** Grading options, mirroring qbank's `GradeOptions`: an injectable gamification recorder so tests
  *  can assert it fires exactly once per applied review (and never on a rejection). */
@@ -162,7 +160,9 @@ export async function gradeReview(
     id: cards.id, deckSetId: cards.deckSetId, deckId: cards.deckId, renderKind: cards.renderKind
   }).from(cards).where(eq(cards.id, cardId))
   if (!card) return err('card-not-found')
-  if (card.renderKind !== 'basic' && card.renderKind !== 'cloze') return err('not-reviewable')
+  // Same renderable-kind gate as the counts/queue use — one REVIEWABLE source of truth (the readonly
+  // cast keeps `.includes` happy for a non-member string without widening REVIEWABLE's element type).
+  if (!(REVIEWABLE as readonly string[]).includes(card.renderKind)) return err('not-reviewable')
 
   const [existing] = await db.select().from(cardScheduling).where(eq(cardScheduling.cardId, cardId))
 
@@ -186,14 +186,6 @@ export async function gradeReview(
 
   // Gamification is a side-effect in its OWN transaction — one activity per applied rating, never
   // blocking or failing the review. On any error the review still succeeds with `activity: null`.
-  let activity: ReviewCardResult['activity'] = null
-  const record = opts.recordActivityFn ?? recordActivity
-  try {
-    const res = await record(db, { kind: 'flashcard.review', now })
-    if (res.ok) activity = res.data
-  } catch {
-    activity = null
-  }
-
+  const activity = await creditActivitySafely(db, { kind: 'flashcard.review', now }, opts.recordActivityFn)
   return ok({ activity })
 }

@@ -179,6 +179,52 @@ describe('Flashcards page', () => {
     expect(countsCalls).toBe(2) // onExit refetched counts
   })
 
+  it('a stale reviewCounts response for a previous deck cannot overwrite the current deck counts', async () => {
+    const twoDecks: DeckNode[] = [
+      { deckId: 10, name: 'A', leafName: 'A', cardCount: 1, children: [] },
+      { deckId: 20, name: 'B', leafName: 'B', cardCount: 1, children: [] }
+    ]
+    // Deck A's counts are gated on a deferred promise so they resolve AFTER deck B's (which resolve now).
+    let releaseA: (r: { ok: true; data: ReviewCounts }) => void = () => {}
+    const countsA = new Promise<{ ok: true; data: ReviewCounts }>((res) => { releaseA = res })
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => twoDecks,
+      reviewCounts: async (id) => (id === 10 ? countsA : { ok: true, data: { newRemaining: 3, learning: 0, due: 0 } })
+    })
+    render(<Flashcards />)
+    // Select A (its fetch stays pending), then quickly switch to B (its fetch resolves → B's counts paint).
+    fireEvent.click(await screen.findByText(/^A$/))
+    fireEvent.click(screen.getByText(/^B$/))
+    await screen.findByText('3 new') // deck B's counts
+    // Now deck A's late response arrives with different counts — the request-token guard must discard it.
+    await act(async () => { releaseA({ ok: true, data: { newRemaining: 7, learning: 0, due: 0 } }) })
+    expect(screen.getByText('3 new')).toBeTruthy()
+    expect(screen.queryByText('7 new')).toBeNull() // the stale deck-A counts never landed
+  })
+
+  it('clicking the already-selected deck row while studying exits the session AND refreshes counts', async () => {
+    let countsCalls = 0
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => tree,
+      reviewCounts: async () => { countsCalls++; return { ok: true, data: { newRemaining: 5, learning: 1, due: 2 } } },
+      nextReviewCard: async () => ({ ok: true, data: { done: true, counts: { newRemaining: 5, learning: 1, due: 2 }, nextLearningDueMs: null } })
+    })
+    render(<Flashcards />)
+    const bioRow = await screen.findByText(/Bio/) // sidebar deck row (captured before the session header exists)
+    fireEvent.click(bioRow)
+    fireEvent.click(await screen.findByText('Study'))
+    await screen.findByText('Nothing to study right now') // in the review session
+    await waitFor(() => expect(countsCalls).toBe(1)) // the initial select fetched once
+
+    // Re-click the SAME sidebar row: selectedDeckId doesn't change (the counts effect won't refire), so
+    // the exit path must refetch counts by hand — mirroring the Exit button.
+    fireEvent.click(bioRow)
+    await screen.findByText('Select a card to preview it.') // exited back to browse
+    await waitFor(() => expect(countsCalls).toBe(2)) // same-deck exit refreshed counts
+  })
+
   it('disables the Study button and labels it "Nothing to study" when all counts are zero', async () => {
     stub({
       listDeckSets: async () => [ds],

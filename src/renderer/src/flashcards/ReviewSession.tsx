@@ -87,11 +87,17 @@ export function ReviewSession({ deckId, deckName, onExit }: {
   }, [fetchNext])
 
   // Space/Enter reveals the answer; 1-4 rate once the answer is showing. Attached on window (no
-  // single element owns focus for this session) and skipped while typing in a form field.
+  // single element owns focus for this session).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
-      const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      // A modifier chord (Cmd/Ctrl/Alt + key) is an OS/browser shortcut, not a review action — never
+      // reveal or grade on it (Cmd+Enter must not reveal; Cmd+1 must not rate).
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      // Don't hijack keyboard activation of a focused interactive element: if the key is aimed at a
+      // button/link/form control, let the browser handle it. (Enter/Space natively activating the four
+      // rating buttons or Exit is the browser doing its job, not a stray reveal.)
+      const target = e.target
+      if (target instanceof HTMLElement && target.closest('button, a, input, textarea, select, [role="button"]')) return
       const current = phaseRef.current
       if (current.kind !== 'card') return
       if (current.side === 'question') {
@@ -106,10 +112,19 @@ export function ReviewSession({ deckId, deckName, onExit }: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [reveal, submitRating])
 
+  // Sandboxed-iframe focus mitigation: once the user clicks inside the opaque-origin card iframe, our
+  // window keydown never fires again (a parent cannot capture keys from an opaque sandboxed frame — full
+  // capture is impossible). Restore keyboard reach by focusing this wrapper on each new card and on the
+  // reveal, so mouse-driven flow keeps Space/1-4 working. Residual limitation: keys pressed while focus
+  // remains INSIDE the iframe (no intervening card/reveal) are lost until the next card or reveal.
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const focusKey = phase.kind === 'card' ? `${phase.card.cardId}:${phase.side}` : phase.kind
+  useEffect(() => { contentRef.current?.focus() }, [focusKey])
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <SessionHeader deckName={deckName} counts={counts} onExit={onExit} />
-      <div className="flex-1 overflow-auto p-4">
+      <div ref={contentRef} tabIndex={-1} className="flex-1 overflow-auto p-4 outline-none">
         {phase.kind === 'loading' && <div role="status" className="p-6 text-gray-400">Loading…</div>}
 
         {phase.kind === 'error' && (

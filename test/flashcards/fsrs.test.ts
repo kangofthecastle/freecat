@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRating, previewIntervals, toFsrsCard, State, Rating, type SchedulingRowValues } from '../../src/main/flashcards/fsrs'
+import { applyRating, previewIntervals, humanizeInterval, toFsrsCard, State, Rating, type SchedulingRowValues } from '../../src/main/flashcards/fsrs'
 
 const now = new Date('2026-07-07T12:00:00.000Z')
 
@@ -57,6 +57,18 @@ describe('fsrs scheduling', () => {
     const b = applyRating(null, Rating.Good, now)
     expect(a.next).toEqual(b.next)
     expect(previewIntervals(null, now)).toEqual(previewIntervals(null, now))
+  })
+
+  it('humanizeInterval promotes a value that rounds up to the next unit boundary', () => {
+    const SEC = 1000, MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000
+    // Boundary cases: rounding must happen before the unit label is picked, so these promote a unit.
+    expect(humanizeInterval(59 * MIN + 30 * SEC)).toBe('1h') // 59m30s rounds to 60m → "1h", not "60m"
+    expect(humanizeInterval(23.7 * HOUR)).toBe('1d')         // 23.7h rounds to 24h → "1d", not "24h"
+    // Plain mid-range case per unit (no promotion).
+    expect(humanizeInterval(30 * SEC)).toBe('<1m')
+    expect(humanizeInterval(6 * MIN)).toBe('6m')
+    expect(humanizeInterval(3 * HOUR)).toBe('3h')
+    expect(humanizeInterval(4 * DAY)).toBe('4d')
   })
 
   it('toFsrsCard rehydrates a persisted row (null → an empty New card)', () => {

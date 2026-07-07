@@ -174,6 +174,44 @@ describe('ReviewSession', () => {
     expect(rateCalls).toBe(2)
   })
 
+  it('ignores a modifier chord: Cmd+1 while the answer is showing does NOT rate', async () => {
+    const rated: { cardId: number; rating: ReviewRating }[] = []
+    let call = 0
+    stub({
+      nextReviewCard: async () => {
+        call++
+        return call === 1 ? { ok: true, data: cardItem(1) } : { ok: true, data: doneItem() }
+      },
+      reviewCard: async (input) => { rated.push(input); return { ok: true, data: { activity: null } } }
+    })
+    render(<ReviewSession deckId={10} deckName="Deck" onExit={() => {}} />)
+    await screen.findByTitle('card')
+    fireEvent.click(screen.getByText('Show answer'))
+    await screen.findByText('Good') // answer side is showing (ratings visible)
+
+    // A modifier chord is an OS/browser shortcut, never a review action.
+    fireEvent.keyDown(window, { key: '1', metaKey: true })
+    fireEvent.keyDown(window, { key: '3', ctrlKey: true })
+    // A plain digit still rates, proving the handler is otherwise live.
+    fireEvent.keyDown(window, { key: '3' })
+    await waitFor(() => expect(rated).toEqual([{ cardId: 1, rating: 3 }]))
+  })
+
+  it('does not hijack Enter aimed at a focused button: reveal is not triggered', async () => {
+    const onExit = vi.fn()
+    stub({ nextReviewCard: async () => ({ ok: true, data: cardItem(1) }) })
+    render(<ReviewSession deckId={10} deckName="Deck" onExit={onExit} />)
+    await screen.findByTitle('card')
+    // Focus the Exit button (an interactive element) and press Enter: the window handler must bail so
+    // the browser can natively activate the button, rather than swallowing it into a reveal.
+    const exitBtn = screen.getAllByText('Exit')[0]!.closest('button') as HTMLButtonElement
+    exitBtn.focus()
+    fireEvent.keyDown(exitBtn, { key: 'Enter' })
+    // Still on the question side — the answer was not revealed.
+    expect(screen.getByText('Show answer')).toBeTruthy()
+    expect(screen.queryByText('Good')).toBeNull()
+  })
+
   it('calls Exit handler', async () => {
     stub({ nextReviewCard: async () => ({ ok: true, data: doneItem() }) })
     const onExit = vi.fn()

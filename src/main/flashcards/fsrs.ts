@@ -4,6 +4,9 @@
 // fuzz is OFF (single local user + reproducible tests) and short-term (re)learning steps are ON
 // (the default 1m/10m ladder), so a given (row, rating, now) always yields the same schedule.
 import { fsrs, generatorParameters, createEmptyCard, Rating, State, type Card, type Grade } from 'ts-fsrs'
+// ReviewRating / RatingPreview are shared DTOs (src/shared/dto.ts is the source of truth); this module
+// consumes them rather than re-declaring, so the renderer and the engine agree by construction.
+import type { ReviewRating, RatingPreview } from '../../shared/dto'
 
 // Re-export the numeric enums so review.ts (and its tests) can name states/ratings without importing
 // ts-fsrs directly — keeping this module the single import boundary.
@@ -11,9 +14,6 @@ export { State, Rating } from 'ts-fsrs'
 
 // Constructed once — the parameters never change (no per-deck tuning in M2).
 export const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: true }))
-
-/** A rating a user can give a shown card. Mirrors ts-fsrs `Grade` (1 Again · 2 Hard · 3 Good · 4 Easy). */
-export type ReviewRating = 1 | 2 | 3 | 4
 
 /** The mutable scheduling fields of a `card_scheduling` row — everything ts-fsrs owns. The persisted
  *  row adds cardId/deckSetId/deckId/introducedDay context that the engine never touches. */
@@ -104,11 +104,19 @@ export function applyRating(
 }
 
 /** Humanize a future interval (ms from now) the way Anki labels its rating buttons:
- *  `<60s → "<1m"`, `<1h → "Xm"`, `<24h → "Xh"`, else `"Xd"` (rounded). */
-function humanizeInterval(ms: number): string {
+ *  `<60s → "<1m"`, `<1h → "Xm"`, `<24h → "Xh"`, else `"Xd"` (rounded). Rounding happens BEFORE the
+ *  unit label is chosen, so a value that rounds up to the next unit's boundary is promoted to it
+ *  (e.g. 59m30s → "1h", not "60m"; 23.7h → "1d", not "24h"). */
+export function humanizeInterval(ms: number): string {
   if (ms < 60_000) return '<1m'
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`
-  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h`
+  if (ms < 3_600_000) {
+    const m = Math.round(ms / 60_000)
+    return m >= 60 ? '1h' : `${m}m`
+  }
+  if (ms < 86_400_000) {
+    const h = Math.round(ms / 3_600_000)
+    return h >= 24 ? '1d' : `${h}h`
+  }
   return `${Math.round(ms / 86_400_000)}d`
 }
 
@@ -117,7 +125,7 @@ function humanizeInterval(ms: number): string {
 export function previewIntervals(
   row: SchedulingInput | null,
   now: Date
-): { again: string; hard: string; good: string; easy: string } {
+): RatingPreview {
   const preview = SCHEDULER.repeat(toFsrsCard(row, now), now)
   const label = (g: Grade): string => humanizeInterval(preview[g].card.due.getTime() - now.getTime())
   return {

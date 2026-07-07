@@ -16,17 +16,25 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
   const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null)
   const [studying, setStudying] = useState(false)
 
+  // Bumped on every counts fetch (and every deselect); a resolution whose token no longer matches is
+  // discarded so a slow reviewCounts for a previously selected deck can't overwrite the current deck's
+  // counts (IPC responses are not order-guaranteed — same pattern as CardList's reqIdRef below).
+  const countsReqIdRef = useRef(0)
   const fetchReviewCounts = useCallback(async (deckId: number) => {
+    const reqId = ++countsReqIdRef.current
     try {
       const res = await window.freecat.flashcards.reviewCounts(deckId)
+      if (reqId !== countsReqIdRef.current) return // a newer deck selection/refetch superseded this one
       setReviewCounts(res.ok ? res.data : null) // {ok:false} → treated as no counts
     } catch (e) {
+      if (reqId !== countsReqIdRef.current) return
       console.error('reviewCounts failed', e); setReviewCounts(null)
     }
   }, [])
 
   useEffect(() => {
-    if (selectedDeckId === null) { setReviewCounts(null); return }
+    // Bump the token here too so an in-flight fetch for a just-deselected deck can't resolve onto null.
+    if (selectedDeckId === null) { countsReqIdRef.current += 1; setReviewCounts(null); return }
     void fetchReviewCounts(selectedDeckId)
   }, [selectedDeckId, fetchReviewCounts])
 
@@ -76,7 +84,14 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
               key={ds.id}
               ds={ds}
               selectedDeckId={selectedDeckId}
-              onSelectDeck={(id, name) => { setSelectedDeckId(id); setSelectedDeckName(name); setSelectedCardId(null); setStudying(false) }}
+              onSelectDeck={(id, name) => {
+                // Clicking the ALREADY-selected deck row doesn't change selectedDeckId, so the counts
+                // effect won't refire. If we were studying it, this click exits the session like the
+                // Exit button — so refresh counts by hand to mirror that path.
+                const sameDeckExit = id === selectedDeckId && studying
+                setSelectedDeckId(id); setSelectedDeckName(name); setSelectedCardId(null); setStudying(false)
+                if (sameDeckExit) void fetchReviewCounts(id)
+              }}
               onDeleted={() => { setSelectedDeckId(null); setSelectedDeckName(null); setSelectedCardId(null); setStudying(false); void loadDeckSets() }}
             />
           ))}

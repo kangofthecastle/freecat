@@ -1,5 +1,5 @@
 // src/renderer/src/flashcards/CardFrame.tsx
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CardView } from '../../../shared/dto'
 import { buildCardHtml } from '../../../shared/flashcards/render'
 import { MATHJAX_SVG_SRC } from './mathjax-asset'
@@ -15,7 +15,9 @@ export function CardFrame({ view, side }: { view: CardView; side: 'question' | '
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
   // Reset height whenever the card or side changes so a tall→short switch doesn't flash the old height.
-  useEffect(() => { setHeight(160) }, [view, side])
+  // useLayoutEffect (not useEffect) so the reset lands BEFORE paint — a post-paint effect would paint
+  // one frame at the old (too-tall) height before shrinking.
+  useLayoutEffect(() => { setHeight(160) }, [view, side])
 
   // Hardened height shim: only our iframe, only the exact payload, clamped.
   useEffect(() => {

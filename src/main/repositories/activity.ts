@@ -72,6 +72,29 @@ export async function recordActivity(
   })
 }
 
+/** The shape of `recordActivity` — an injectable seam so callers/tests can swap the gamification
+ *  recorder. Single source for both qbank grading and flashcard review (each re-exports it for its
+ *  existing importers). */
+export type RecordActivityFn = typeof recordActivity
+
+/** Credit gamification as a non-blocking side-effect: run `recordFn` (default `recordActivity`) in
+ *  its OWN transaction and swallow any failure, returning the `ActivityResult` on success or `null`
+ *  when it resolves `{ok:false}` or throws. Shared by qbank grading and flashcard review, which both
+ *  credit exactly one activity per applied answer and must degrade to `activity: null` identically —
+ *  so the "never block/fail the action on gamification" invariant lives in one place, not two. */
+export async function creditActivitySafely(
+  db: DB,
+  input: Parameters<RecordActivityFn>[1],
+  recordFn: RecordActivityFn = recordActivity
+): Promise<ActivityResult | null> {
+  try {
+    const res = await recordFn(db, input)
+    return res.ok ? res.data : null
+  } catch {
+    return null
+  }
+}
+
 export async function getStreak(db: DB, now = new Date(), tz = appTz()): Promise<number> {
   return streakDays(await activeDayKeys(db), now, tz)
 }
