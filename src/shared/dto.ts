@@ -5,6 +5,7 @@ export type ServiceErrorCode =
   | 'not-found' | 'invalid' | 'insufficient-coins' | 'egg-exists'
   | 'no-pet' | 'already-owned' | 'not-owned' | 'not-ready' | 'name-too-long'
   | 'deck-not-found' | 'card-not-found' | 'deck-set-not-found'
+  | 'not-reviewable' | 'not-due'
   | 'unsupported-format' | 'corrupt-package' | 'import-too-large'
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; error: ServiceErrorCode }
 export const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data })
@@ -173,3 +174,18 @@ export interface CardView {
   clozeOrdinal: number | null
   mediaMap: CardMedia[]
 }
+
+// --- Flashcards review / FSRS DTOs (M2) ---
+/** A rating a user gives a shown card: 1 Again · 2 Hard · 3 Good · 4 Easy. */
+export type ReviewRating = 1 | 2 | 3 | 4
+/** Live queue counts for a studied deck subtree (all renderable + subtree-scoped). */
+export interface ReviewCounts { newRemaining: number; learning: number; due: number }
+/** Humanized "next interval" label per rating, for the four review buttons. */
+export interface RatingPreview { again: string; hard: string; good: string; easy: string }
+/** What to show next: a card (with fresh counts + previews) or a done state that may name when the
+ *  earliest still-pending learning card returns (ms), so the UI can offer "N cards back in ~X min". */
+export type ReviewQueueItem =
+  | { done: false; card: CardView; counts: ReviewCounts; preview: RatingPreview }
+  | { done: true; counts: ReviewCounts; nextLearningDueMs: number | null }
+/** Result of applying a rating: the gamification activity rides back (null if it failed/no-op). */
+export interface ReviewCardResult { activity: ActivityResult | null }

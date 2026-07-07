@@ -29,5 +29,8 @@ export const CH = {
   fcListDecks:     'flashcards:listDecks',
   fcListCards:     'flashcards:listCards',
   fcGetCard:       'flashcards:getCard',
-  fcDeleteDeckSet: 'flashcards:deleteDeckSet'
+  fcDeleteDeckSet: 'flashcards:deleteDeckSet',
+  fcReviewCounts:   'flashcards:reviewCounts',
+  fcNextReviewCard: 'flashcards:nextReviewCard',
+  fcReviewCard:     'flashcards:reviewCard'
 } as const

@@ -2,7 +2,7 @@
 // test/flashcards/flashcards-page.test.tsx
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, waitFor, fireEvent, act } from '@testing-library/react'
-import type { DeckSetSummary, DeckNode, CardListPage, CardView } from '../../src/shared/dto'
+import type { DeckSetSummary, DeckNode, CardListPage, CardView, ReviewCounts, ReviewQueueItem } from '../../src/shared/dto'
 
 vi.mock('../../src/renderer/src/flashcards/mathjax-asset', () => ({ MATHJAX_SVG_SRC: '' }))
 import Flashcards from '../../src/renderer/src/pages/Flashcards'
@@ -15,6 +15,9 @@ type Freecat = {
     getCard: (id: number) => Promise<{ ok: true; data: CardView } | { ok: false; error: string }>
     importDeck: () => Promise<{ ok: true; data: DeckSetSummary } | { ok: false; error: string }>
     deleteDeckSet: (id: number) => Promise<{ ok: true; data: null } | { ok: false; error: string }>
+    reviewCounts: (id: number) => Promise<{ ok: true; data: ReviewCounts } | { ok: false; error: string }>
+    nextReviewCard: (id: number) => Promise<{ ok: true; data: ReviewQueueItem } | { ok: false; error: string }>
+    reviewCard: (input: { cardId: number; rating: number }) => Promise<{ ok: true; data: { activity: null } } | { ok: false; error: string }>
   }
 }
 function stub(over: Partial<Freecat['flashcards']> = {}): void {
@@ -24,7 +27,10 @@ function stub(over: Partial<Freecat['flashcards']> = {}): void {
     listCards: async () => ({ cards: [], nextAfterId: null }),
     getCard: async () => ({ ok: false, error: 'card-not-found' }),
     importDeck: async () => ({ ok: false, error: 'invalid' }),
-    deleteDeckSet: async () => ({ ok: true, data: null })
+    deleteDeckSet: async () => ({ ok: true, data: null }),
+    reviewCounts: async () => ({ ok: false, error: 'deck-not-found' }),
+    nextReviewCard: async () => ({ ok: true, data: { done: true, counts: { newRemaining: 0, learning: 0, due: 0 }, nextLearningDueMs: null } }),
+    reviewCard: async () => ({ ok: true, data: { activity: null } })
   }
   // @ts-expect-error partial bridge stub
   globalThis.window.freecat = { flashcards: { ...base, ...over } }
@@ -147,5 +153,53 @@ describe('Flashcards page', () => {
     fireEvent.click(screen.getByText('Delete'))
     await screen.findByText(/No decks yet/i)
     expect(deletes).toBe(1)
+  })
+
+  it('shows a Study button with counts for a selected deck, enters the review session, and Exit returns to browse', async () => {
+    let countsCalls = 0
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => tree,
+      reviewCounts: async () => { countsCalls++; return { ok: true, data: { newRemaining: 5, learning: 1, due: 2 } } },
+      nextReviewCard: async () => ({ ok: true, data: { done: true, counts: { newRemaining: 5, learning: 1, due: 2 }, nextLearningDueMs: null } })
+    })
+    render(<Flashcards />)
+    fireEvent.click(await screen.findByText(/Bio/))
+    const studyBtn = await screen.findByText('Study')
+    expect((studyBtn.closest('button') as HTMLButtonElement).disabled).toBe(false)
+    await screen.findByText('5 new')
+    expect(countsCalls).toBe(1)
+
+    fireEvent.click(studyBtn)
+    await screen.findByText('Nothing to study right now') // ReviewSession took over the main pane
+    expect(screen.queryByText('Select a card to preview it.')).toBeNull()
+
+    fireEvent.click(screen.getAllByText('Exit')[0]!)
+    await screen.findByText('Select a card to preview it.') // back to browse
+    expect(countsCalls).toBe(2) // onExit refetched counts
+  })
+
+  it('disables the Study button and labels it "Nothing to study" when all counts are zero', async () => {
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => tree,
+      reviewCounts: async () => ({ ok: true, data: { newRemaining: 0, learning: 0, due: 0 } })
+    })
+    render(<Flashcards />)
+    fireEvent.click(await screen.findByText(/Bio/))
+    const btn = await screen.findByText('Nothing to study')
+    expect((btn.closest('button') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('treats a reviewCounts {ok:false} as no counts (disabled Study button)', async () => {
+    stub({
+      listDeckSets: async () => [ds],
+      listDecks: async () => tree,
+      reviewCounts: async () => ({ ok: false, error: 'deck-not-found' })
+    })
+    render(<Flashcards />)
+    fireEvent.click(await screen.findByText(/Bio/))
+    const btn = await screen.findByText('Nothing to study')
+    expect((btn.closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
 })

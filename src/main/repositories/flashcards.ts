@@ -2,7 +2,7 @@ import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { eq, and, gt, asc, inArray, sql } from 'drizzle-orm'
 import type { DB } from '../db/client'
-import { deckSets, decks, noteTypes, noteTypeFields, templates, notes, cards, media } from '../db/schema'
+import { deckSets, decks, noteTypes, noteTypeFields, templates, notes, cards, media, cardScheduling, reviewLog } from '../db/schema'
 import type { DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardListItem, ServiceResult } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import type { RenderKind } from '../../shared/flashcards/types'
@@ -112,6 +112,11 @@ export async function deleteDeckSet(db: DB, deckSetId: number, mediaDir?: string
   await db.transaction(async (tx) => {
     const nts = await tx.select({ id: noteTypes.id }).from(noteTypes).where(eq(noteTypes.deckSetId, deckSetId))
     const ntIds = nts.map((n) => n.id)
+    // Scheduling + review history first — same explicit-delete pattern; both cascade from `cards`
+    // anyway, but we delete them up front so the invariant "no orphan scheduling/log rows" holds
+    // regardless of PRAGMA foreign_keys, matching how the rest of this teardown is spelled out.
+    await tx.delete(cardScheduling).where(eq(cardScheduling.deckSetId, deckSetId))
+    await tx.delete(reviewLog).where(eq(reviewLog.deckSetId, deckSetId))
     await tx.delete(cards).where(eq(cards.deckSetId, deckSetId))
     await tx.delete(notes).where(eq(notes.deckSetId, deckSetId))
     await tx.delete(media).where(eq(media.deckSetId, deckSetId))

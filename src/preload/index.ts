@@ -44,7 +44,10 @@ const api: FreecatApi = {
     listDecks: (deckSetId) => ipcRenderer.invoke(CH.fcListDecks, deckSetId),
     listCards: (input) => ipcRenderer.invoke(CH.fcListCards, input),
     getCard: (cardId) => ipcRenderer.invoke(CH.fcGetCard, cardId),
-    deleteDeckSet: (deckSetId) => ipcRenderer.invoke(CH.fcDeleteDeckSet, deckSetId)
+    deleteDeckSet: (deckSetId) => ipcRenderer.invoke(CH.fcDeleteDeckSet, deckSetId),
+    reviewCounts: (deckId) => ipcRenderer.invoke(CH.fcReviewCounts, deckId),
+    nextReviewCard: (deckId) => ipcRenderer.invoke(CH.fcNextReviewCard, deckId),
+    reviewCard: (input) => ipcRenderer.invoke(CH.fcReviewCard, input)
   }
 }
 contextBridge.exposeInMainWorld('freecat', api)
