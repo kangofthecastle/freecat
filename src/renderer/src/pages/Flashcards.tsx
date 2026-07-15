@@ -1,16 +1,42 @@
 // src/renderer/src/pages/Flashcards.tsx
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DeckSetSummary, DeckNode, CardListItem } from '../../../shared/dto'
+import type { DeckSetSummary, DeckNode, CardListItem, ReviewCounts } from '../../../shared/dto'
 import type { PageProps } from '../App'
 import { errorMessage } from '../gamification/labels'
 import { CardViewer } from '../flashcards/CardViewer'
+import { ReviewSession } from '../flashcards/ReviewSession'
 
 export default function Flashcards(_props: PageProps): React.JSX.Element {
   const [deckSets, setDeckSets] = useState<DeckSetSummary[] | null>(null)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null)
+  const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null)
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
+  const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null)
+  const [studying, setStudying] = useState(false)
+
+  // Bumped on every counts fetch (and every deselect); a resolution whose token no longer matches is
+  // discarded so a slow reviewCounts for a previously selected deck can't overwrite the current deck's
+  // counts (IPC responses are not order-guaranteed — same pattern as CardList's reqIdRef below).
+  const countsReqIdRef = useRef(0)
+  const fetchReviewCounts = useCallback(async (deckId: number) => {
+    const reqId = ++countsReqIdRef.current
+    try {
+      const res = await window.freecat.flashcards.reviewCounts(deckId)
+      if (reqId !== countsReqIdRef.current) return // a newer deck selection/refetch superseded this one
+      setReviewCounts(res.ok ? res.data : null) // {ok:false} → treated as no counts
+    } catch (e) {
+      if (reqId !== countsReqIdRef.current) return
+      console.error('reviewCounts failed', e); setReviewCounts(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Bump the token here too so an in-flight fetch for a just-deselected deck can't resolve onto null.
+    if (selectedDeckId === null) { countsReqIdRef.current += 1; setReviewCounts(null); return }
+    void fetchReviewCounts(selectedDeckId)
+  }, [selectedDeckId, fetchReviewCounts])
 
   const loadDeckSets = useCallback(async () => {
     try { setDeckSets(await window.freecat.flashcards.listDeckSets()) }
@@ -58,24 +84,69 @@ export default function Flashcards(_props: PageProps): React.JSX.Element {
               key={ds.id}
               ds={ds}
               selectedDeckId={selectedDeckId}
-              onSelectDeck={(id) => { setSelectedDeckId(id); setSelectedCardId(null) }}
-              onDeleted={() => { setSelectedDeckId(null); setSelectedCardId(null); void loadDeckSets() }}
+              onSelectDeck={(id, name) => {
+                // Clicking the ALREADY-selected deck row doesn't change selectedDeckId, so the counts
+                // effect won't refire. If we were studying it, this click exits the session like the
+                // Exit button — so refresh counts by hand to mirror that path.
+                const sameDeckExit = id === selectedDeckId && studying
+                setSelectedDeckId(id); setSelectedDeckName(name); setSelectedCardId(null); setStudying(false)
+                if (sameDeckExit) void fetchReviewCounts(id)
+              }}
+              onDeleted={() => { setSelectedDeckId(null); setSelectedDeckName(null); setSelectedCardId(null); setStudying(false); void loadDeckSets() }}
             />
           ))}
         </div>
       </aside>
 
-      <section className="w-80 shrink-0 overflow-auto border-r border-gray-200">
-        {selectedDeckId === null
-          ? <p className="p-4 text-sm text-gray-400">Select a deck to see its cards.</p>
-          : <CardList key={selectedDeckId} deckId={selectedDeckId} selectedCardId={selectedCardId} onSelect={setSelectedCardId} />}
-      </section>
+      {selectedDeckId !== null && studying ? (
+        <ReviewSession
+          deckId={selectedDeckId}
+          deckName={selectedDeckName ?? ''}
+          onExit={() => { setStudying(false); void fetchReviewCounts(selectedDeckId) }}
+        />
+      ) : (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {selectedDeckId !== null && (
+            <StudyBar counts={reviewCounts} onStudy={() => setStudying(true)} />
+          )}
+          <div className="flex flex-1 overflow-hidden">
+            <section className="w-80 shrink-0 overflow-auto border-r border-gray-200">
+              {selectedDeckId === null
+                ? <p className="p-4 text-sm text-gray-400">Select a deck to see its cards.</p>
+                : <CardList key={selectedDeckId} deckId={selectedDeckId} selectedCardId={selectedCardId} onSelect={setSelectedCardId} />}
+            </section>
 
-      <main className="flex-1 overflow-auto p-4">
-        {selectedCardId === null
-          ? <p className="p-4 text-sm text-gray-400">Select a card to preview it.</p>
-          : <CardViewer cardId={selectedCardId} />}
-      </main>
+            <main className="flex-1 overflow-auto p-4">
+              {selectedCardId === null
+                ? <p className="p-4 text-sm text-gray-400">Select a card to preview it.</p>
+                : <CardViewer cardId={selectedCardId} />}
+            </main>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StudyBar({ counts, onStudy }: { counts: ReviewCounts | null; onStudy: () => void }): React.JSX.Element {
+  const total = counts ? counts.newRemaining + counts.learning + counts.due : 0
+  const disabled = total === 0
+  return (
+    <div className="flex items-center gap-3 border-b border-gray-200 p-3">
+      <button
+        onClick={onStudy}
+        disabled={disabled}
+        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+      >
+        {disabled ? 'Nothing to study' : 'Study'}
+      </button>
+      {counts && !disabled && (
+        <div className="flex gap-1 text-xs">
+          <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-700">{counts.newRemaining} new</span>
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-700">{counts.learning} learning</span>
+          <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700">{counts.due} due</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -95,7 +166,7 @@ function ImportButton({ importing, onImport, compact = false }: { importing: boo
 function DeckSetBlock({ ds, selectedDeckId, onSelectDeck, onDeleted }: {
   ds: DeckSetSummary
   selectedDeckId: number | null
-  onSelectDeck: (id: number) => void
+  onSelectDeck: (id: number, name: string) => void
   onDeleted: () => void
 }): React.JSX.Element {
   const [decks, setDecks] = useState<DeckNode[] | null>(null)
@@ -143,7 +214,7 @@ function DeckRow({ node, depth, selectedDeckId, onSelectDeck }: {
   node: DeckNode
   depth: number
   selectedDeckId: number | null
-  onSelectDeck: (id: number) => void
+  onSelectDeck: (id: number, name: string) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(true)
   const hasChildren = node.children.length > 0
@@ -154,7 +225,7 @@ function DeckRow({ node, depth, selectedDeckId, onSelectDeck }: {
           ? <button onClick={() => setOpen(!open)} className="w-4 shrink-0 text-gray-400" aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}>{open ? '▾' : '▸'}</button>
           : <span className="w-4 shrink-0" />}
         <button
-          onClick={() => onSelectDeck(node.deckId)}
+          onClick={() => onSelectDeck(node.deckId, node.name)}
           aria-current={selectedDeckId === node.deckId ? 'true' : undefined}
           className={`flex-1 truncate rounded px-2 py-1 text-left text-sm ${selectedDeckId === node.deckId ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
         >

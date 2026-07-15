@@ -3,7 +3,8 @@ import type {
   Outline, LessonDetail, LessonRef, MarkCompleteResult,
   DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
   SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats, QuestionRef,
-  DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardView
+  DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardView,
+  ReviewCounts, ReviewQueueItem, ReviewRating, ReviewCardResult
 } from './dto'
 
 // The qbank submit/flag handlers wrap their result in a ServiceResult (the main process never
@@ -50,5 +51,8 @@ export interface FreecatApi {
     listCards: (input: ListCardsInput) => Promise<CardListPage>
     getCard: (cardId: number) => Promise<ServiceResult<CardView>>
     deleteDeckSet: (deckSetId: number) => Promise<ServiceResult<null>>
+    reviewCounts: (deckId: number) => Promise<ServiceResult<ReviewCounts>>
+    nextReviewCard: (deckId: number) => Promise<ServiceResult<ReviewQueueItem>>
+    reviewCard: (input: { cardId: number; rating: ReviewRating }) => Promise<ServiceResult<ReviewCardResult>>
   }
 }

@@ -16,6 +16,8 @@ const ERROR_COPY: Record<ServiceErrorCode, string> = {
   'deck-not-found': 'Sorry, that deck could not be found.',
   'card-not-found': 'Sorry, that card could not be found.',
   'deck-set-not-found': 'Sorry, that import could not be found.',
+  'not-reviewable': 'That card cannot be studied yet.',
+  'not-due': 'That card is not due right now.',
   'unsupported-format': 'That file format is not supported yet.',
   'corrupt-package': 'That file looks corrupted and could not be imported.',
   'import-too-large': 'That file is too large to import.'
