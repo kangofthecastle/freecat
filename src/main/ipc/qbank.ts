@@ -8,7 +8,6 @@ import type { QuestionRef } from '../../shared/dto'
 import { planSession, gradeAndRecord, summarize } from '../qbank/sessions'
 import { completeSession } from '../repositories/qbank-sessions'
 import { toggleFlag } from '../repositories/qbank-flags'
-import { getDashboard } from '../repositories/qbank-analytics'
 
 export const startSessionSchema = z
   .object({
@@ -62,7 +61,6 @@ export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOpti
   })
   ipcMain.handle(CH.qbankToggleFlag, async (_e, raw: unknown) =>
     ok(await toggleFlag(db, toggleFlagSchema.parse(raw), now())))
-  ipcMain.handle(CH.qbankDashboard, () => getDashboard(db, index))
   ipcMain.handle(CH.qbankQuestionsForTaxonomy, (_e, raw: unknown): QuestionRef[] => {
     const topic = questionsForTaxonomySchema.parse(raw)
     return (index.byTopic.get(topic) ?? []).map((id) => ({ id, topic }))

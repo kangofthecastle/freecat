@@ -16,7 +16,7 @@ export function SessionSummary({
   questions,
   answers,
   onNewSession,
-  onViewDashboard,
+  onViewStats,
   navigate
 }: {
   summary: SessionSummaryDto
@@ -24,7 +24,7 @@ export function SessionSummary({
   /** Cached per-question results (questionId -> AnswerResult). */
   answers: Record<string, AnswerResult>
   onNewSession: () => void
-  onViewDashboard: () => void
+  onViewStats: () => void
   /** Optional: threaded into each review's Explanation so post-session review keeps the
    *  "Review the lesson" cross-link (matches the live session's renderExplanation). */
   navigate?: (key: RouteKey, payload?: NavPayload) => void
@@ -109,10 +109,10 @@ export function SessionSummary({
         </button>
         <button
           type="button"
-          onClick={onViewDashboard}
+          onClick={onViewStats}
           className="rounded-lg bg-white px-5 py-2.5 font-semibold text-gray-700 ring-1 ring-gray-300 transition hover:bg-gray-100"
         >
-          View dashboard
+          View stats
         </button>
       </div>
     </div>

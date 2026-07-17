@@ -4,13 +4,15 @@ import Nest from './pages/Nest'
 import Qbank from './pages/Qbank'
 import ContentReview from './pages/ContentReview'
 import Flashcards from './pages/Flashcards'
+import Stats from './pages/Stats'
 
 const ROUTES = {
   home: { label: 'Home', component: Home },
   nest: { label: 'Nest', component: Nest },
   qbank: { label: 'Qbank', component: Qbank },
   content: { label: 'Content Review', component: ContentReview },
-  flashcards: { label: 'Flashcards', component: Flashcards }
+  flashcards: { label: 'Flashcards', component: Flashcards },
+  stats: { label: 'Stats', component: Stats }
 } as const
 
 export type RouteKey = keyof typeof ROUTES

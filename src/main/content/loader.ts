@@ -80,8 +80,9 @@ export interface ScanOptions {
   checkImages?: boolean // default true
 }
 
-/** Fixed discipline → MCAT section map (no CARS). */
-const SECTION_BY_DISCIPLINE: Record<DisciplineKey, SectionCode> = {
+/** Fixed discipline → MCAT section map (no CARS). Exported for the Stats rollup, which groups
+ *  the same way (single source — a new discipline slots into both by editing this map once). */
+export const SECTION_BY_DISCIPLINE: Record<DisciplineKey, SectionCode> = {
   'gen-chem': 'chem-phys',
   'o-chem': 'chem-phys',
   physics: 'chem-phys',
