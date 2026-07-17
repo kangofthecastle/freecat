@@ -263,4 +263,41 @@ describe('review repository', () => {
     expect(await reviewCounts(db, 999999, T0)).toBeNull()
     expect(await nextReviewCard(db, 999999, T0)).toBeNull()
   })
+
+  describe('new-card order (the Plan module setting, injected as a parameter)', () => {
+    async function seedTen(): Promise<number> {
+      await writeCollection(db, {
+        sourceFilename: 'a.apkg', sourceFormat: 'legacy1',
+        parsed: collection({
+          noteTypes: [basicNT],
+          decks: [{ ankiId: 1, name: 'D' }],
+          cardsSpec: Array.from({ length: 10 }, () => ({ deckAnkiId: 1, noteTypeAnkiId: 1 }))
+        })
+      })
+      return deckIdByName(db, 'D')
+    }
+
+    it("default 'deck' order serves the lowest-id new card, stably", async () => {
+      const d = await seedTen()
+      const [lowest] = await cardIds(db)
+      for (let i = 0; i < 3; i++) {
+        const next = await nextReviewCard(db, d, T0, 'deck')
+        expect(next && !next.done && next.cardId).toBe(lowest)
+      }
+    })
+
+    it("'shuffled' varies the pick across draws and only ever serves un-introduced cards", async () => {
+      const d = await seedTen()
+      const pool = new Set(await cardIds(db))
+      const seen = new Set<number>()
+      // 20 uniform draws from 10 cards: P(all identical) = (1/10)^19 — deterministic in practice.
+      for (let i = 0; i < 20; i++) {
+        const next = await nextReviewCard(db, d, T0, 'shuffled')
+        if (next === null || next.done) throw new Error('expected a new card')
+        expect(pool.has(next.cardId)).toBe(true)
+        seen.add(next.cardId)
+      }
+      expect(seen.size).toBeGreaterThan(1)
+    })
+  })
 })

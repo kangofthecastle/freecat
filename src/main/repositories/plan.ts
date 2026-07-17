@@ -1,14 +1,14 @@
 import { and, eq, gte, lt, lte, inArray, sql, count } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import {
-  planSettings, planTask, planTaxonomyPref, planLessonOffer,
+  planSettings, planTask, planTaxonomyPref, planLessonOffer, planDayAward,
   cardScheduling, cards, lessonProgress, qbankAttempt,
   type PlanSettingsRow, type PlanTaskRow
 } from '../db/schema'
 import type {
   PlanSettingsDto, SavePlanSettingsInput, SavePlanSettingsResult, PacingOutcomeDto,
   PlanPrefDto, PlanTaskDto, PlanTriangleDto, PlanView, SetPlanTaskStatusInput,
-  ServiceResult, DisciplineKey
+  SetPlanTaskStatusResult, ActivityResult, ServiceResult, DisciplineKey
 } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import type { ContentIndex } from '../content/types'
@@ -19,7 +19,7 @@ import { computeMastery } from '../stats/mastery'
 import { classifyFingerprints, type FingerprintAttempt } from '../stats/fingerprints'
 import { PLAN_CONFIG } from '../plan/config'
 import { computeRampDays } from '../plan/fsrs-ramp'
-import { flashcardTriangle, validatePacing, questionsBehindPace, clampDailyNew, type Triangle } from '../plan/pacing'
+import { flashcardTriangle, validatePacing, questionsBehindPace, habitPacing, type Triangle } from '../plan/pacing'
 import { plannerShrunkMastery, type Comfort } from '../plan/comfort'
 import {
   materializeDay, type PlanTopic, type MistakeCandidate, type PlanSkipKind, type PlannedTask
@@ -31,7 +31,8 @@ import {
 import { loadAttempts, latestPerQuestion, type AttemptRow } from './attempt-evidence'
 import { listFlaggedIds } from './qbank-flags'
 import { NEW_PER_DAY, REVIEWABLE } from './review'
-import { appTz } from './activity'
+import { appTz, creditActivitySafely, type RecordActivityFn } from './activity'
+import { REWARDS_CONFIG } from '../../shared/gamification/config'
 
 const TOPIC_TITLE: ReadonlyMap<string, string> = new Map(TOPICS.map((t) => [t.slug, t.title]))
 const DISCIPLINE_TITLE: ReadonlyMap<string, string> = new Map(DISCIPLINES.map((d) => [d.slug, d.title]))
@@ -134,18 +135,11 @@ export async function savePlanSettings(
 
   if (input.pacingEdit) {
     if (next.examDate == null) {
-      // No exam date ⇒ no triangle: a dailyNew edit stores directly (habit-mode new-card pace);
-      // a goal has nothing to be derived against and is refused as meaningless.
-      if (input.pacingEdit.field === 'dailyNew') {
-        next.dailyNewTarget = clampDailyNew(input.pacingEdit.value, NEW_PER_DAY)
+      // Shared habit-mode rule (the wizard/settings preview runs the same function).
+      pacing = habitPacing(input.pacingEdit, NEW_PER_DAY, current.dailyNewTarget)
+      if (pacing.ok) {
+        next.dailyNewTarget = pacing.derived.dailyNew
         next.masteryGoalPct = null
-        pacing = { ok: true, derived: { dailyNew: next.dailyNewTarget, goalPct: 0 } }
-      } else {
-        pacing = {
-          ok: false,
-          derived: { dailyNew: current.dailyNewTarget ?? 0, goalPct: input.pacingEdit.value },
-          refusalReason: 'Set an exam date first — a mastery goal needs a finish date to pace against'
-        }
       }
     } else {
       const finishKey = addDaysToKey(next.examDate, -next.finishBufferDays)
@@ -219,13 +213,54 @@ export async function savePlanPrefs(db: DB, prefs: PlanPrefDto[], now = new Date
 export async function setPlanTaskStatus(
   db: DB,
   input: SetPlanTaskStatusInput,
-  now = new Date()
-): Promise<ServiceResult<PlanTaskDto>> {
+  now = new Date(),
+  opts: { recordActivityFn?: RecordActivityFn; tz?: string } = {}
+): Promise<ServiceResult<SetPlanTaskStatusResult>> {
   const [row] = await db.select().from(planTask).where(eq(planTask.id, input.taskId))
   if (!row) return err('not-found')
   if (row.status === 'expired') return err('invalid') // system-resolved; the day is gone
   await db.update(planTask).set({ status: input.status, updatedAt: now }).where(eq(planTask.id, input.taskId))
-  return ok(toTaskDto({ ...row, status: input.status }))
+
+  // Only a completion can newly finish a day, so only completions bother checking for the bonus.
+  const activity =
+    input.status === 'completed'
+      ? await maybeAwardPlanDay(db, row.day, now, opts.tz ?? appTz(), opts.recordActivityFn)
+      : null
+  return ok({ task: toTaskDto({ ...row, status: input.status }), activity })
+}
+
+/**
+ * The `plan.day` bonus: fires when a status change leaves `day` fully complete (`dayOutcome`
+ * semantics — every required task completed, skips excluded, optional lessons never counted).
+ * Guards, in order:
+ * - `day` must not be in the future: the IPC channel accepts any taskId, so without this a caller
+ *   could complete the whole materialized horizon and bank a week of bonuses in seconds.
+ * - The durable `plan_day_award` marker makes it at-most-once per dayKey — un-complete/re-complete
+ *   cycles and regeneration rebuilds cannot re-trigger it (same reasoning as `plan_lesson_offer`),
+ *   and only the call whose INSERT actually lands (checked via RETURNING) credits, so two
+ *   completions racing on the same day cannot double-credit.
+ * - Marker-before-credit is deliberate failure ordering: if the credit itself fails, the bonus for
+ *   that day is forfeited (never retried) rather than ever risking a double award.
+ * Credit rides the standard gamification pipeline via `creditActivitySafely`: its own transaction,
+ * swallowed on failure, never blocking the status change itself.
+ */
+async function maybeAwardPlanDay(
+  db: DB,
+  day: string,
+  now: Date,
+  tz: string,
+  recordActivityFn?: RecordActivityFn
+): Promise<ActivityResult | null> {
+  if (day > dayKeyInTz(now, tz)) return null
+  const dayRows = await db.select({ status: planTask.status, optional: planTask.optional }).from(planTask).where(eq(planTask.day, day))
+  if (dayOutcome(dayRows) !== 'complete') return null
+  const inserted = await db
+    .insert(planDayAward)
+    .values({ day, awardedAt: now })
+    .onConflictDoNothing()
+    .returning({ id: planDayAward.id })
+  if (inserted.length === 0) return null // an earlier (or concurrent) completion already awarded it
+  return creditActivitySafely(db, { kind: 'plan.day', count: REWARDS_CONFIG.planDayBonus, now }, recordActivityFn)
 }
 
 const taskTitle = (row: Pick<PlanTaskRow, 'kind' | 'taxonomyRef' | 'refine'>): string => {
@@ -521,7 +556,7 @@ export async function regeneratePlan(db: DB, ctx: PlanContext): Promise<void> {
   })
 }
 
-// ── The assembled view (debug surface now; Phase 3's data channel later) ──
+// ── The assembled view (the Plan page's data channel) ──
 
 export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
   const now = ctx.now ?? new Date()
@@ -559,6 +594,15 @@ export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
   const windowStatuses = onTrackWindowStatuses(statusesByDay, todayKey)
   const rate = planCompletionRate(windowStatuses)
 
+  // A5: the skip-rate must cover the SAME span the streak can (the loaded 30-day history), not just
+  // the 7-day on-track window — otherwise a heavy-skip stretch older than a week reads as a clean
+  // streak with nothing disclosed. Same today-rule as the on-track window: an in-progress today
+  // doesn't count until it's complete.
+  const skipStatuses: StatusLike[] = []
+  for (const [day, statuses] of statusesByDay) {
+    if (day < todayKey || dayOutcome(statuses) === 'complete') skipStatuses.push(...statuses)
+  }
+
   const triangleRaw = triangleFor(settings, pool, todayKey)
   const triangle: PlanTriangleDto | null = triangleRaw && settings.examDate != null
     ? {
@@ -590,9 +634,17 @@ export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
       streak: planStreak(outcomeByDay, todayKey),
       completionRate: rate,
       onTrack: onTrackStatus(rate),
-      skipRate: planSkipRate(windowStatuses)
+      skipRate: planSkipRate(skipStatuses)
     },
     triangle,
+    // Raw triangle material, exam date or not — the wizard runs the shared triangle live off these.
+    pool: {
+      deckSize: pool.deckSize,
+      introducedSoFar: pool.introducedSoFar,
+      rampDays: computeRampDays(),
+      dailyNewCeiling: NEW_PER_DAY
+    },
+    questions: { publishedTotal: ctx.index.allQuestionIds.length, attemptedDistinct: facts.attemptedDistinct },
     behindPace
   }
 }

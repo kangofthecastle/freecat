@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { flashcardTriangle, validatePacing, questionsBehindPace } from '../../src/main/plan/pacing'
+import { flashcardTriangle, validatePacing, habitPacing, questionsBehindPace } from '../../src/main/plan/pacing'
 
 const BASE = { deckSize: 1000, introducedSoFar: 100, rampDays: 28, dailyNewCeiling: 20 }
 
@@ -62,6 +62,16 @@ describe('validatePacing (never silently raise workload)', () => {
     expect(r.derived.dailyNew).toBe(29)
     expect(r.refusalReason).toContain('29')
     expect(r.refusalReason).toContain('20')
+  })
+})
+
+describe('habitPacing (shared by engine persistence AND the live preview)', () => {
+  test('dailyNew edit stores clamped; goal edit is refused and ECHOES the current pace, never 0', () => {
+    expect(habitPacing({ field: 'dailyNew', value: 99 }, 20, null)).toEqual({ ok: true, derived: { dailyNew: 20, goalPct: 0 } })
+    const refused = habitPacing({ field: 'goalPct', value: 80 }, 20, 12)
+    expect(refused.ok).toBe(false)
+    expect(refused.derived).toEqual({ dailyNew: 12, goalPct: 80 }) // preview keeps showing the real pace
+    expect(refused.refusalReason).toContain('exam date')
   })
 })
 

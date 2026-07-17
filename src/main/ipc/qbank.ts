@@ -8,6 +8,7 @@ import type { QuestionRef } from '../../shared/dto'
 import { planSession, gradeAndRecord, summarize } from '../qbank/sessions'
 import { completeSession } from '../repositories/qbank-sessions'
 import { toggleFlag } from '../repositories/qbank-flags'
+import { getAvailability } from '../repositories/qbank-analytics'
 
 export const startSessionSchema = z
   .object({
@@ -76,4 +77,6 @@ export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOpti
     const topic = questionsForTaxonomySchema.parse(raw)
     return (index.byTopic.get(topic) ?? []).map((id) => ({ id, topic }))
   })
+  // Zero-arg snapshot the composer counts against client-side (no per-control round trips).
+  ipcMain.handle(CH.qbankAvailability, () => getAvailability(db, index))
 }

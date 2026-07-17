@@ -23,6 +23,7 @@ export const CH = {
   qbankCompleteSession: 'qbank:completeSession',
   qbankToggleFlag: 'qbank:toggleFlag',
   qbankQuestionsForTaxonomy: 'qbank:questionsForTaxonomy',
+  qbankAvailability: 'qbank:availability',
   statsOverview: 'stats:overview',
   planGet: 'plan:get',
   planSaveSettings: 'plan:saveSettings',

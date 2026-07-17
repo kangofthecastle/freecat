@@ -2,8 +2,8 @@ import type {
   ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView,
   Outline, LessonDetail, LessonRef, MarkCompleteResult,
   DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
-  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, StatsOverview, QuestionRef,
-  PlanView, SavePlanSettingsInput, SavePlanSettingsResult, PlanPrefDto, SetPlanTaskStatusInput, PlanTaskDto,
+  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, StatsOverview, QuestionRef, AvailabilityQuestionDto,
+  PlanView, SavePlanSettingsInput, SavePlanSettingsResult, PlanPrefDto, SetPlanTaskStatusInput, SetPlanTaskStatusResult,
   DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardView,
   ReviewCounts, ReviewQueueItem, ReviewRating, ReviewCardResult
 } from './dto'
@@ -43,6 +43,7 @@ export interface FreecatApi {
     completeSession: (sessionId: number) => Promise<SessionSummary>
     toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>
     questionsForTaxonomy: (topicSlug: string) => Promise<QuestionRef[]>
+    availability: () => Promise<AvailabilityQuestionDto[]>
   }
   stats: {
     overview: () => Promise<StatsOverview>
@@ -51,7 +52,7 @@ export interface FreecatApi {
     get: () => Promise<PlanView>
     saveSettings: (input: SavePlanSettingsInput) => Promise<ServiceResult<SavePlanSettingsResult>>
     savePrefs: (prefs: PlanPrefDto[]) => Promise<ServiceResult<null>>
-    setTaskStatus: (input: SetPlanTaskStatusInput) => Promise<ServiceResult<PlanTaskDto>>
+    setTaskStatus: (input: SetPlanTaskStatusInput) => Promise<ServiceResult<SetPlanTaskStatusResult>>
     regenerate: () => Promise<ServiceResult<null>>
   }
   flashcards: {

@@ -10,7 +10,7 @@ import { registerQbankIpc } from './ipc/qbank'
 import { registerFlashcardsIpc } from './ipc/flashcards'
 import { registerStatsIpc } from './ipc/stats'
 import { registerPlanIpc } from './ipc/plan'
-import { createPlanRegenerator } from './repositories/plan'
+import { createPlanRegenerator, getPlanSettings } from './repositories/plan'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { TOPICS } from './db/seed/taxonomy-data'
@@ -132,7 +132,11 @@ app.whenReady().then(async () => {
   registerContentReviewIpc(db, lessonStore, { onActivity: planRegen.schedule })
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index, { onActivity: planRegen.schedule })
-  registerFlashcardsIpc(db, { onActivity: planRegen.schedule })
+  registerFlashcardsIpc(db, {
+    onActivity: planRegen.schedule,
+    // The Plan module owns newCardOrder; flashcards get it as a getter (same decoupling as onActivity).
+    newCardOrder: async () => (await getPlanSettings(db)).newCardOrder
+  })
   registerStatsIpc(db, index)
   registerPlanIpc(db, index, lessonSlugs, planRegen)
 
