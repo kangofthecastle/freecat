@@ -17,6 +17,7 @@ function q(id: string, over: Partial<QuestionContent> = {}): QuestionContent {
     discipline: 'physics',
     section: 'chem-phys',
     tags: [{ vocab: 'aamc', code: '4A' }],
+    difficulty: 'medium',
     passageId: null,
     stem: `stem ${id}`,
     choices: ['a', 'b', 'c', 'd'],

@@ -3,12 +3,16 @@ import type { ChoiceLetter, DisciplineKey, Tag } from '../../shared/dto'
 /** MCAT test section, derived from a discipline (no CARS). */
 export type SectionCode = 'chem-phys' | 'bio-biochem' | 'psych-soc'
 
+/** Author-declared difficulty tier ('medium' when unstated). Diagnostic composition prefers medium. */
+export type Difficulty = 'easy' | 'medium' | 'hard'
+
 export interface QuestionContent {
   id: string
   topic: string // primary topic slug (e.g. 'biochem.enzymes')
   discipline: DisciplineKey // derived from the topic's parent discipline
   section: SectionCode // derived from the discipline
   tags: Tag[] // 0+ (e.g. [{ vocab: 'aamc', code: '1A' }])
+  difficulty: Difficulty
   passageId: string | null
   stem: string
   choices: [string, string, string, string]

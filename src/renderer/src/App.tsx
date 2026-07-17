@@ -27,6 +27,9 @@ export interface NavPayload {
   /** Inbound to Qbank from a Plan task: auto-start exactly this session (sized topic practice or
    *  spaced mistake review). Each navigation builds a fresh object — Qbank dedups on identity. */
   qbankSession?: StartSessionInput
+  /** Inbound to Qbank: auto-start the server-composed cold-start diagnostic. A fresh object per
+   *  navigation — Qbank dedups on identity, exactly like `qbankSession`. */
+  qbankDiagnostic?: { start: true }
 }
 
 /** Pages may opt into navigation by accepting these props. */

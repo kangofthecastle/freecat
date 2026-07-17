@@ -287,6 +287,7 @@ function normalizeQuestion(
     discipline: resolved.discipline,
     section: resolved.section,
     tags,
+    difficulty: q.difficulty,
     passageId,
     stem: rewriteImagePaths(q.stem, itemRel),
     choices,

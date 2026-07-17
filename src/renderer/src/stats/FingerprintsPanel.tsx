@@ -1,18 +1,23 @@
-import type { TopicFingerprintDto } from '../../../shared/dto'
+import type { FingerprintWindowDto, TopicFingerprintDto } from '../../../shared/dto'
 import { MODE_LABEL, fingerprintCoaching } from './insights'
 
 export function FingerprintsPanel({
   fingerprints,
+  window,
   onTopic
 }: {
   fingerprints: TopicFingerprintDto[]
+  /** The recency window the classifier ACTUALLY used — label it honestly, especially when widened. */
+  window: FingerprintWindowDto
   onTopic: (topicSlug: string) => void
 }): React.JSX.Element {
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
       <h3 className="mb-1 text-lg font-semibold text-gray-700">Error patterns</h3>
       <p className="mb-4 text-sm text-gray-500">
-        How your recent misses miss (last 60 days). Tap a topic to practice it.
+        How your recent misses miss (last {window.days} days
+        {window.widened ? ' — stretched back to gather enough recent attempts' : ''}). Tap a topic
+        to practice it.
       </p>
       {fingerprints.length === 0 ? (
         <p className="rounded-lg bg-gray-50 p-4 text-gray-500">

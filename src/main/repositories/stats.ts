@@ -15,8 +15,10 @@ import { dayKeyInTz, addDaysToKey } from '../../shared/gamification/dates'
 import { STATS_CONFIG } from '../stats/config'
 import { computeMastery, type MasteryAttempt, type MasteryResult } from '../stats/mastery'
 import {
-  classifyFingerprints, timeBaselines, fingerprintEvidence, median, type FingerprintAttempt
+  classifyFingerprints, timeBaselines, fingerprintEvidence, median, selectRecencyWindow,
+  type FingerprintAttempt
 } from '../stats/fingerprints'
+import { buildMasteryTrend, type TrendAttempt } from '../stats/mastery-trend'
 import { buildEffortTrend } from '../stats/effort'
 import { summarizeFlashcards } from '../stats/flashcard-load'
 import { listFlaggedIds } from './qbank-flags'
@@ -124,20 +126,31 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
     }
   })
 
-  // ── Fingerprints + pacing over the recency window (whole local days) ──
-  const fpWindowStart = addDaysToKey(todayKey, -(STATS_CONFIG.fingerprints.windowDays - 1))
-  const windowed: FingerprintAttempt[] = attempts
-    .filter((a) => dayKeyInTz(a.answeredAt, tz) >= fpWindowStart)
-    .map((a) => ({
-      id: a.id,
-      questionId: a.questionId,
-      topic: a.topic,
-      section: a.section as SectionCode,
-      chosen: a.chosen,
-      isCorrect: a.isCorrect,
-      timeMs: a.timeMs,
-      answeredAt: a.answeredAt
-    }))
+  // ── As-of-day mastery trend (Phase 4) — recomputed from the same attempt stream ──
+  const publishedBySection = {} as Record<SectionCode, number>
+  for (const s of sections) publishedBySection[s.section] = s.mastery.published
+  const trendAttempts: TrendAttempt[] = attempts.map((a) => ({
+    id: a.id,
+    questionId: a.questionId,
+    section: a.section as SectionCode,
+    isCorrect: a.isCorrect,
+    answeredAt: a.answeredAt,
+    flagged: flaggedIds.has(a.questionId)
+  }))
+  const masteryTrend = buildMasteryTrend(trendAttempts, publishedBySection, todayKey, tz)
+
+  // ── Fingerprints over the ADAPTIVE recency window (Phase 4: widens when usage is thin) ──
+  const fpWindow = selectRecencyWindow(attempts, todayKey, tz)
+  const windowed: FingerprintAttempt[] = fpWindow.attempts.map((a) => ({
+    id: a.id,
+    questionId: a.questionId,
+    topic: a.topic,
+    section: a.section as SectionCode,
+    chosen: a.chosen,
+    isCorrect: a.isCorrect,
+    timeMs: a.timeMs,
+    answeredAt: a.answeredAt
+  }))
   const baselines = timeBaselines(windowed)
   // Discipline comes from the canonical taxonomy seed; the attempt row's denormalized column is
   // only a fallback for a topic that has since left the seed (content drift), never the primary.
@@ -160,13 +173,10 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
     })
     .sort((a, b) => b.totalErrors - a.totalErrors)
 
-  // Pacing has its OWN window tunable — today equal to the fingerprint window, but honored
-  // independently so retuning one never silently drags the other.
+  // Pacing has its OWN fixed window — the fingerprint window now ADAPTS (widens when thin), so
+  // the two can no longer share a filter even while their configured day counts match.
   const paceWindowStart = addDaysToKey(todayKey, -(STATS_CONFIG.pacing.windowDays - 1))
-  const paceAttempts =
-    STATS_CONFIG.pacing.windowDays === STATS_CONFIG.fingerprints.windowDays
-      ? windowed
-      : attempts.filter((a) => dayKeyInTz(a.answeredAt, tz) >= paceWindowStart)
+  const paceAttempts = attempts.filter((a) => dayKeyInTz(a.answeredAt, tz) >= paceWindowStart)
   const pacing: SectionPacingDto[] = SECTIONS.map((section) => {
     const times = paceAttempts.filter((a) => a.section === section && a.timeMs != null).map((a) => a.timeMs!)
     const hasBaseline = times.length >= STATS_CONFIG.pacing.minTimedForMedian
@@ -236,7 +246,9 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
       lessonsCompleted: lessonsDone.length
     },
     sections,
+    masteryTrend,
     fingerprints,
+    fingerprintWindow: { days: fpWindow.days, widened: fpWindow.widened },
     pacing,
     effortTrend,
     heatmap: { byDay, todayKey, weeks: STATS_CONFIG.heatmapWeeks },

@@ -1,5 +1,6 @@
 import type { ChoiceLetter, ErrorMode } from '../../shared/dto'
 import type { SectionCode } from '../content/types'
+import { dayKeyInTz, addDaysToKey, dayNumberOfKey } from '../../shared/gamification/dates'
 import { STATS_CONFIG } from './config'
 
 /** One raw attempt for the fingerprint classifier — ALL (windowed) attempts, not just latest.
@@ -26,6 +27,46 @@ export interface TopicFingerprint {
 /** Tie-break priority for the dominant mode — favour the more actionable/specific diagnosis
  *  (ported order, minus 'timeout': blank attempts are impossible by schema here). */
 const DOMINANCE_PRIORITY: ErrorMode[] = ['repeated_distractor', 'slow_wrong', 'careless_fast', 'standard']
+
+/** The recency window actually applied to the classifier's input. */
+export interface RecencyWindow<T> {
+  attempts: T[]
+  days: number // whole local days the window spans, ending today
+  widened: boolean // true when the configured window was too thin and got extended backward
+}
+
+/**
+ * Select the fingerprint recency window (Phase 4 tuning). The configured `windowDays` stays the
+ * default — windowing itself is the deliberate B9 fix and is not up for debate — but real
+ * personal-scale usage showed a fixed window can starve the classifier: one light month and there
+ * is nothing left to diagnose. When the window holds fewer than `minWindowAttempts`, widen
+ * backward in WHOLE DAYS to the day of the Nth-most-recent attempt (or all history when fewer
+ * than N exist at all). Day-granular widening keeps every included question's attempt history
+ * intact — a mid-day cut could hide the older attempts repeated-distractor counts across.
+ */
+export function selectRecencyWindow<T extends { id: number; answeredAt: Date }>(
+  attempts: T[],
+  todayKey: string,
+  tz: string,
+  cfg: { windowDays: number; minWindowAttempts: number } = STATS_CONFIG.fingerprints
+): RecencyWindow<T> {
+  const defaultStart = addDaysToKey(todayKey, -(cfg.windowDays - 1))
+  const inWindow = attempts.filter((a) => dayKeyInTz(a.answeredAt, tz) >= defaultStart)
+  // Enough signal — or nothing older exists to widen into — so the configured window stands.
+  if (inWindow.length >= cfg.minWindowAttempts || inWindow.length === attempts.length) {
+    return { attempts: inWindow, days: cfg.windowDays, widened: false }
+  }
+  const recentFirst = [...attempts].sort(
+    (a, b) => b.answeredAt.getTime() - a.answeredAt.getTime() || b.id - a.id
+  )
+  const anchor = recentFirst[Math.min(cfg.minWindowAttempts, recentFirst.length) - 1]!
+  const startKey = dayKeyInTz(anchor.answeredAt, tz)
+  return {
+    attempts: attempts.filter((a) => dayKeyInTz(a.answeredAt, tz) >= startKey),
+    days: dayNumberOfKey(todayKey) - dayNumberOfKey(startKey) + 1,
+    widened: true
+  }
+}
 
 /** Midpoint median (average of the two middles on even length). Exported so the pacing panel's
  *  medians and the fingerprint time baselines share ONE implementation and can never drift. */

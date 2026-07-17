@@ -33,7 +33,10 @@ const questionBase = {
   correct: choiceLetter,
   explanation: z.string().min(1),
   choiceExplanations,
-  tags: z.array(tag).default([])
+  tags: z.array(tag).default([]),
+  // Author-declared difficulty tier; unstated = 'medium', so the whole bank is diagnostic-eligible
+  // by default and authors only ever tag the outliers.
+  difficulty: z.enum(['easy', 'medium', 'hard']).default('medium')
 }
 
 // A standalone question carries its own required primary topic.

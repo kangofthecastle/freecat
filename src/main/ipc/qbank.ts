@@ -5,7 +5,7 @@ import type { ContentIndex } from '../content/types'
 import { CH } from '../../shared/channels'
 import { ok } from '../../shared/dto'
 import type { QuestionRef } from '../../shared/dto'
-import { planSession, gradeAndRecord, summarize } from '../qbank/sessions'
+import { planSession, planDiagnosticSession, gradeAndRecord, summarize } from '../qbank/sessions'
 import { completeSession } from '../repositories/qbank-sessions'
 import { toggleFlag } from '../repositories/qbank-flags'
 import { getAvailability } from '../repositories/qbank-analytics'
@@ -51,6 +51,10 @@ export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOpti
   const now = opts.now ?? (() => new Date())
   ipcMain.handle(CH.qbankStartSession, (_e, raw: unknown) =>
     planSession(index, db, startSessionSchema.parse(raw), { now: now(), rng: Math.random }))
+  // Zero-arg by design: the diagnostic's composition (and its 'diagnostic' mode) is entirely
+  // server-side — no renderer input can request the mode or bend the mix.
+  ipcMain.handle(CH.qbankStartDiagnostic, () =>
+    planDiagnosticSession(index, db, { now: now(), rng: Math.random }))
   ipcMain.handle(CH.qbankSubmitAnswer, async (_e, raw: unknown) => {
     const result = await gradeAndRecord(index, db, submitAnswerSchema.parse(raw), { now: now() })
     if (result.ok) opts.onActivity?.()

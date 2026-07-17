@@ -26,7 +26,7 @@ function q(id: string, topic: string, discipline: string, section: string, tags:
   return {
     id, topic, discipline: discipline as QuestionContent['discipline'], section: section as QuestionContent['section'],
     tags, passageId: null, stem: `stem ${id}`, choices: ['a', 'b', 'c', 'd'],
-    correct: 'A', explanation: 'e', choiceExplanations: {}
+    correct: 'A', explanation: 'e', choiceExplanations: {}, difficulty: 'medium'
   }
 }
 
@@ -104,7 +104,9 @@ describe('getStatsOverview', () => {
       expect(s.mastery.needsData).toBe(true)
       expect(s.mastery.stale).toBe(false)
     }
+    expect(o.masteryTrend).toEqual([])
     expect(o.fingerprints).toEqual([])
+    expect(o.fingerprintWindow).toEqual({ days: 60, widened: false })
     expect(o.pacing.every((p) => p.medianMs === null)).toBe(true)
     expect(o.effortTrend).toHaveLength(90)
     expect(o.effortTrend.every((d) => d.points === 0)).toBe(true)
@@ -159,8 +161,21 @@ describe('getStatsOverview', () => {
     const fpEnz = o.fingerprints.find((f) => f.topic === 'biochem.enzymes')!
     expect(fpEnz.mode).toBe(null)
     expect(fpEnz.unsureCorrect).toBe(1)
-    // old-1's 70-day-old miss is outside the window ⇒ no fluids fingerprint
-    expect(o.fingerprints.find((f) => f.topic === 'physics.fluids')).toBeUndefined()
+    // Only 6 attempts exist (< minWindowAttempts), so the Phase 4 adaptive window WIDENS back to
+    // the 70-day-old attempt — its miss is now fairly in scope and honestly labeled.
+    expect(o.fingerprintWindow).toEqual({ days: 71, widened: true })
+    const fpFluids = o.fingerprints.find((f) => f.topic === 'physics.fluids')!
+    expect(fpFluids.mode).toBe('standard') // timed exactly at the median: no time bucket fires
+
+    // ── mastery trend: as-of-day recomputation from the first attempt day through today ──
+    expect(o.masteryTrend).toHaveLength(71)
+    expect(o.masteryTrend[0]!.day).toBe('2026-05-08')
+    expect(o.masteryTrend.at(-1)!.day).toBe('2026-07-17')
+    // Day one: only old-1 exists ⇒ chem-phys still under the needs-data floor.
+    expect(o.masteryTrend[0]!.sections['chem-phys']).toBeNull()
+    // Today: four latest chem-phys attempts ⇒ scored; bb-1 alone (half-weight) stays null.
+    expect(o.masteryTrend.at(-1)!.sections['chem-phys']).not.toBeNull()
+    expect(o.masteryTrend.at(-1)!.sections['bio-biochem']).toBeNull()
 
     // ── pacing: 4 timed chem-phys attempts in window < 5 minimum ⇒ median withheld ──
     const paceCp = o.pacing.find((p) => p.section === 'chem-phys')!

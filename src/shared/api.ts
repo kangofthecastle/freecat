@@ -39,6 +39,8 @@ export interface FreecatApi {
   }
   qbank: {
     startSession: (input: StartSessionInput) => Promise<StartSessionResult>
+    /** Server-composed cold-start diagnostic (mode 'diagnostic'); takes no input by design. */
+    startDiagnostic: () => Promise<StartSessionResult>
     submitAnswer: (input: SubmitAnswerInput) => Promise<ServiceResult<SubmitAnswerResult>>
     completeSession: (sessionId: number) => Promise<SessionSummary>
     toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>

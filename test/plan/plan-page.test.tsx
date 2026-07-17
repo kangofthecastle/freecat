@@ -116,8 +116,34 @@ describe('onboarding wizard', () => {
     expect(handles.saveSettings).toHaveBeenCalledWith({ examDate: '2026-12-01', dailyBudgetMinutes: 60, onboarded: true })
     expect(handles.savePrefs).toHaveBeenCalledWith([{ taxonomyRef: 'physics', comfort: 2, excluded: false }])
 
+    // Everything committed → the optional diagnostic offer, NOT the dashboard yet.
+    await screen.findByText(/Your plan is ready/)
     // The parent swaps to the dashboard only via onDone → refetch.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
     await screen.findByText('Plan streak')
+  })
+
+  it('the post-save offer starts the diagnostic via a qbank deep-link', async () => {
+    let current = makeView()
+    current.settings.onboardedAt = null
+    stub({
+      view: () => current,
+      saveSettings: async () => {
+        current = makeView()
+        return ok<SavePlanSettingsResult>({ settings: current.settings, pacing: null })
+      }
+    })
+    const navigate = vi.fn()
+    render(<Plan navigate={navigate} />)
+    await screen.findByText('Set up your plan')
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Start planning/ }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start diagnostic' }))
+    expect(navigate).toHaveBeenCalledWith('qbank', { qbankDiagnostic: { start: true } })
   })
 
   it('with a pacing edit, onboarded:true is sent ONLY after the engine accepts the pacing (two-phase)', async () => {
@@ -148,6 +174,7 @@ describe('onboarding wizard', () => {
     await waitFor(() => expect(handles.saveSettings).toHaveBeenCalledTimes(2))
     expect(calls[0]).toEqual({ examDate: '2026-12-01', dailyBudgetMinutes: 60, pacingEdit: { field: 'dailyNew', value: 8 } })
     expect(calls[1]).toEqual({ onboarded: true })
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
     await screen.findByText('Plan streak')
   })
 
@@ -168,6 +195,27 @@ describe('onboarding wizard', () => {
 })
 
 describe('plan dashboard', () => {
+  it('cold-start card renders only while zero questions are attempted, deep-links, and dismisses', async () => {
+    const view = makeView()
+    view.questions = { publishedTotal: 20, attemptedDistinct: 0 }
+    stub({ view: () => view })
+    const navigate = vi.fn()
+    render(<Plan navigate={navigate} />)
+
+    await screen.findByText('Calibrate your plan')
+    fireEvent.click(screen.getByRole('button', { name: 'Start diagnostic' }))
+    expect(navigate).toHaveBeenCalledWith('qbank', { qbankDiagnostic: { start: true } })
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss diagnostic offer' }))
+    expect(screen.queryByText('Calibrate your plan')).toBeNull()
+  })
+
+  it('cold-start card is absent once ANY question has been attempted', async () => {
+    stub({ view: () => makeView() }) // makeView has attemptedDistinct: 5
+    render(<Plan />)
+    await screen.findByText('Plan streak')
+    expect(screen.queryByText('Calibrate your plan')).toBeNull()
+  })
+
   it('A5: the skip-rate renders beside the streak', async () => {
     stub({ view: () => makeView() })
     render(<Plan />)

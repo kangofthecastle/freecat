@@ -17,6 +17,7 @@ export function SessionSummary({
   answers,
   onNewSession,
   onViewStats,
+  diagnostic = false,
   navigate
 }: {
   summary: SessionSummaryDto
@@ -25,6 +26,8 @@ export function SessionSummary({
   answers: Record<string, AnswerResult>
   onNewSession: () => void
   onViewStats: () => void
+  /** True after a diagnostic session — adds the "your plan now has evidence" framing. */
+  diagnostic?: boolean
   /** Optional: threaded into each review's Explanation so post-session review keeps the
    *  "Review the lesson" cross-link (matches the live session's renderExplanation). */
   navigate?: (key: RouteKey, payload?: NavPayload) => void
@@ -41,7 +44,9 @@ export function SessionSummary({
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-8">
       <header className="rounded-2xl bg-gradient-to-b from-sky-50 to-white p-8 text-center ring-1 ring-sky-100">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Session complete</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {diagnostic ? 'Diagnostic complete' : 'Session complete'}
+        </p>
         <p className="mt-2 text-5xl font-bold text-gray-800">
           {summary.correct}
           <span className="text-2xl text-gray-400"> / {summary.total}</span>
@@ -50,6 +55,12 @@ export function SessionSummary({
         <div className="mx-auto mt-4 h-2 w-64 overflow-hidden rounded-full bg-gray-100">
           <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
         </div>
+        {diagnostic && (
+          <p className="mx-auto mt-4 max-w-md text-sm text-gray-500">
+            Your plan and stats now start from this evidence instead of guesses — the next
+            regeneration already reflects it.
+          </p>
+        )}
       </header>
 
       <section className="space-y-2">

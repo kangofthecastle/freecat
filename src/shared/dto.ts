@@ -233,10 +233,27 @@ export interface StatsTotalsDto {
   lessonsCompleted: number
 }
 
+/** One day of the as-of-day mastery recomputation (Phase 4 trend). Each section holds its mastery
+ *  in [0,1] as of that day's end, or null while its evidence was still below the needs-data floor
+ *  (a gap in the chart, never a fake score). The range starts at the first attempt's day. */
+export interface MasteryTrendDayDto {
+  day: string // local dayKey
+  sections: Record<SectionCode, number | null>
+}
+
+/** The fingerprint recency window actually applied: `days` grows past the configured window when
+ *  recent attempts alone were too few to diagnose (thin usage), flagged by `widened`. */
+export interface FingerprintWindowDto {
+  days: number
+  widened: boolean
+}
+
 export interface StatsOverview {
   totals: StatsTotalsDto
   sections: SectionStatsDto[] // the 3 content sections (no CARS — no taxonomy to hang it on)
+  masteryTrend: MasteryTrendDayDto[] // as-of-day recomputation, oldest→newest; [] with no attempts
   fingerprints: TopicFingerprintDto[] // topics with recent misses or unsure-correct signal
+  fingerprintWindow: FingerprintWindowDto
   pacing: SectionPacingDto[]
   effortTrend: EffortDayDto[] // last trendDays local days, zero-filled, oldest→newest
   heatmap: { byDay: Record<string, number>; todayKey: string; weeks: number } // from daily_activity

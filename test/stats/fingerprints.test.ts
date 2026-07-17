@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import {
-  classifyFingerprints, timeBaselines, fingerprintEvidence, type FingerprintAttempt
+  classifyFingerprints, timeBaselines, fingerprintEvidence, selectRecencyWindow,
+  type FingerprintAttempt
 } from '../../src/main/stats/fingerprints'
+import { addDaysToKey } from '../../src/shared/gamification/dates'
 
 const NOW = new Date('2026-07-17T12:00:00Z')
 const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000)
@@ -113,5 +115,57 @@ describe('classifyFingerprints', () => {
     ]
     const fps = classifyFingerprints(attempts, [])
     expect(fps.map((f) => f.topic)).toEqual(['biochem.enzymes', 'physics.mechanics'])
+  })
+})
+
+describe('selectRecencyWindow (Phase 4 adaptive widening)', () => {
+  const TZ = 'UTC'
+  const TODAY = '2026-07-17'
+  const CFG = { windowDays: 60, minWindowAttempts: 20 }
+  const onDay = (day: string, id: number): { id: number; answeredAt: Date } => ({
+    id,
+    answeredAt: new Date(`${day}T12:00:00Z`)
+  })
+  const days = (n: number, from: string, perDay = 1): { id: number; answeredAt: Date }[] => {
+    const out: { id: number; answeredAt: Date }[] = []
+    let id = 1
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < perDay; k++) out.push(onDay(addDaysToKey(from, i), id++))
+    }
+    return out
+  }
+
+  test('enough recent attempts ⇒ the configured window stands, older history excluded', () => {
+    const recent = days(20, '2026-07-01') // 20 attempts inside 60d
+    const old = [onDay('2026-01-01', 999)]
+    const w = selectRecencyWindow([...old, ...recent], TODAY, TZ, CFG)
+    expect(w.widened).toBe(false)
+    expect(w.days).toBe(60)
+    expect(w.attempts).toHaveLength(20)
+  })
+
+  test('thin window with older history ⇒ widens in whole days to the Nth-most-recent attempt', () => {
+    // 5 recent + 30 attempts ~100 days back: the 20th-most-recent lands on an old day.
+    const recent = days(5, '2026-07-13')
+    const old = days(1, '2026-04-01', 30) // all 30 on 2026-04-01 (107 days before today)
+    const w = selectRecencyWindow([...old, ...recent], TODAY, TZ, CFG)
+    expect(w.widened).toBe(true)
+    expect(w.days).toBe(108) // 2026-04-01 .. 2026-07-17 inclusive
+    expect(w.attempts).toHaveLength(35) // whole-day widening keeps every attempt of the anchor day
+  })
+
+  test('all history already inside the window ⇒ never widened, however thin', () => {
+    const w = selectRecencyWindow(days(3, '2026-07-15'), TODAY, TZ, CFG)
+    expect(w.widened).toBe(false)
+    expect(w.days).toBe(60)
+    expect(w.attempts).toHaveLength(3)
+  })
+
+  test('fewer than N attempts overall ⇒ widens to all of history', () => {
+    const recent = days(2, '2026-07-16')
+    const old = days(3, '2026-03-01')
+    const w = selectRecencyWindow([...old, ...recent], TODAY, TZ, CFG)
+    expect(w.widened).toBe(true)
+    expect(w.attempts).toHaveLength(5)
   })
 })

@@ -31,7 +31,7 @@ function q(id: string, topic: string, discipline: string, section: string): Ques
   return {
     id, topic, discipline: discipline as QuestionContent['discipline'], section: section as QuestionContent['section'],
     tags: [], passageId: null, stem: `stem ${id}`, choices: ['a', 'b', 'c', 'd'],
-    correct: 'A', explanation: 'e', choiceExplanations: {}
+    correct: 'A', explanation: 'e', choiceExplanations: {}, difficulty: 'medium'
   }
 }
 

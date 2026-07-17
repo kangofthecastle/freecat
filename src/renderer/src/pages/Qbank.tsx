@@ -28,28 +28,49 @@ export default function Qbank(props: PageProps): React.JSX.Element {
   // the Plan page builds a fresh input object (so re-clicking the same task re-fires), while
   // StrictMode's immediate second effect run sees the same object and skips.
   const lastPlanSessionRef = useRef<StartSessionInput | null>(null)
+  // Same identity-dedup for the diagnostic offer's payload object.
+  const lastDiagnosticRef = useRef<object | null>(null)
 
-  const start = useCallback(async (input: StartSessionInput): Promise<void> => {
-    if (startingRef.current) return
-    startingRef.current = true
-    setStartError(null)
-    try {
-      const result = await window.freecat.qbank.startSession(input)
-      if (result.questions.length === 0) {
-        setStartError(
-          'No questions matched that selection. Try a broader scope or the “All questions” filter.'
-        )
-        return
+  const run = useCallback(
+    async (fetchSession: () => Promise<StartSessionResult>, emptyMessage: string): Promise<void> => {
+      if (startingRef.current) return
+      startingRef.current = true
+      setStartError(null)
+      try {
+        const result = await fetchSession()
+        if (result.questions.length === 0) {
+          setStartError(emptyMessage)
+          return
+        }
+        setSession(result)
+        setView('session')
+      } catch (e) {
+        console.error('startSession threw', e)
+        setStartError('We could not start a session just now. Please try again.')
+      } finally {
+        startingRef.current = false
       }
-      setSession(result)
-      setView('session')
-    } catch (e) {
-      console.error('startSession threw', e)
-      setStartError('We could not start a session just now. Please try again.')
-    } finally {
-      startingRef.current = false
-    }
-  }, [])
+    },
+    []
+  )
+
+  const start = useCallback(
+    (input: StartSessionInput): Promise<void> =>
+      run(
+        () => window.freecat.qbank.startSession(input),
+        'No questions matched that selection. Try a broader scope or the “All questions” filter.'
+      ),
+    [run]
+  )
+
+  const startDiagnostic = useCallback(
+    (): Promise<void> =>
+      run(
+        () => window.freecat.qbank.startDiagnostic(),
+        'The question bank is empty — a diagnostic needs at least a few published questions.'
+      ),
+    [run]
+  )
 
   // Inbound cross-link: a topic deep-link (e.g. from a CR lesson's "Practice this topic")
   // auto-starts a topic-scoped session instead of showing the Composer. Fire only when the slug
@@ -70,6 +91,15 @@ export default function Qbank(props: PageProps): React.JSX.Element {
     lastPlanSessionRef.current = input
     void start(input)
   }, [navPayload, start])
+
+  // Inbound diagnostic offer (onboarding finish screen / Plan's cold-start card): the session is
+  // composed server-side, so the payload is just a fresh trigger object.
+  useEffect(() => {
+    const req = navPayload?.qbankDiagnostic
+    if (!req || lastDiagnosticRef.current === req) return
+    lastDiagnosticRef.current = req
+    void startDiagnostic()
+  }, [navPayload, startDiagnostic])
 
   const complete = useCallback((rec: SessionRecord): void => {
     setRecord(rec)
@@ -132,6 +162,7 @@ export default function Qbank(props: PageProps): React.JSX.Element {
           answers={record.answers}
           onNewSession={newSession}
           onViewStats={() => navigate?.('stats')}
+          diagnostic={record.mode === 'diagnostic'}
           navigate={navigate}
         />
       )}
