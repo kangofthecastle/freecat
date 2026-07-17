@@ -7,6 +7,10 @@ import type { Scope } from './scope-tree'
  * plain arithmetic here, no round trips. The filters MIRROR `planSession`'s eligibility order
  * (scope → tag OR-filter → refine set); if these ever disagree with the engine, the composer's
  * promises go stale, so both sides keep the same shape deliberately.
+ *
+ * Counts are of ELIGIBLE questions only. `planSession` additionally serves passages whole (an
+ * eligible passage question pulls its siblings along), so a real session can exceed the count —
+ * the UI hedges its copy accordingly rather than simulating unit-taking client-side.
  */
 
 export interface ScopeCounts {

@@ -12,10 +12,8 @@ import { listFlaggedIds } from './qbank-flags'
  * The composer's availability snapshot: one row per published question with exactly the facts the
  * eligibility filter in `planSession` uses (scope keys, tag keys, latest-incorrect, flagged). The
  * renderer counts matches for any scope × refine × tag combination with pure client arithmetic —
- * the sat-world composer pattern: one snapshot at load, zero round-trips per control change, and
- * the user can never compose a session that Start will refuse.
- *
- * (Subsumes the old `getCounts` — incorrect/flagged totals are one fold over these rows.)
+ * one snapshot at load, zero round-trips per control change, and the user can never compose a
+ * session that Start will refuse.
  */
 export async function getAvailability(db: DB, index: ContentIndex): Promise<AvailabilityQuestionDto[]> {
   const [incorrect, flagged] = await Promise.all([latestIncorrectQuestionIds(db), listFlaggedIds(db)])

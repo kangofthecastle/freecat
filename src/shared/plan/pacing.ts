@@ -84,6 +84,25 @@ export interface PacingResult {
 }
 
 /**
+ * Habit-mode pacing (no exam date): a dailyNew edit stores directly (clamped to the ceiling); a
+ * goal edit is refused as meaningless — there is no finish date to pace it against. One function
+ * for BOTH the engine's persistence path and the renderer's live preview, so the refusal copy and
+ * the clamp can never fork between them. The refusal echoes `currentDailyNew` in `derived` so a
+ * preview never displays a zeroed-out pace the user doesn't actually have.
+ */
+export function habitPacing(edit: PacingEdit, ceiling: number, currentDailyNew: number | null): PacingResult {
+  if (edit.field === 'dailyNew') {
+    const dailyNew = clampDailyNew(edit.value, ceiling)
+    return { ok: true, derived: { dailyNew, goalPct: 0 } }
+  }
+  return {
+    ok: false,
+    derived: { dailyNew: currentDailyNew ?? 0, goalPct: clamp(edit.value, 0, 100) },
+    refusalReason: 'Set an exam date first — a mastery goal needs a finish date to pace against'
+  }
+}
+
+/**
  * The single pure validator (ported rule intact): editing `dailyNew` derives the goal DOWN and is
  * ALWAYS allowed — never silently raise the user's workload. Only a `goalPct` edit can be refused,
  * and only when the required daily-new count exceeds the reviewer's ceiling; the refusal still

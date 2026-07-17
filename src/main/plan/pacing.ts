@@ -7,7 +7,7 @@ import { dayNumberOfKey } from '../../shared/gamification/dates'
  * other feedback — and is re-exported here so engine code keeps one import site for pacing math.
  */
 export {
-  clampDailyNew, flashcardTriangle, validatePacing,
+  clampDailyNew, flashcardTriangle, validatePacing, habitPacing,
   type Triangle, type TriangleInput, type PacingEdit, type ValidatePacingInput, type PacingResult
 } from '../../shared/plan/pacing'
 

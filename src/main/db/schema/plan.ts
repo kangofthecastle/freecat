@@ -1,8 +1,8 @@
 import { sqliteTable, integer, text, index, uniqueIndex, check } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
-// Plan-owned (Module 5). Additive migrations 0007 (Phase 2 engine) + 0008 (Phase 3's plan_day_award)
-// — no other module's tables change.
+// Plan-owned tables (Module 5). Migrations here are additive-only and never touch another
+// module's tables; other modules never write these.
 
 /** Singleton (id = 1). All pacing knobs are USER-owned (no teacher track here, ever).
  *  `examDate` is a local dayKey; null = habit mode (plan still materializes from budget + FSRS dues

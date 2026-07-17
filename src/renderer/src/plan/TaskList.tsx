@@ -103,14 +103,19 @@ function TaskCard({
                 >
                   {task.status === 'started' ? 'Resume' : meta.verb}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onStatus(task, 'completed')}
-                  title="Mark done"
-                  className="rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200"
-                >
-                  ✓ Done
-                </button>
+                {/* No manual Done for lessons: completion belongs to Content Review (it writes
+                    lesson_progress + credits the lesson activity); once read, the next
+                    regeneration resolves this offer. A plan-side Done would fake completion. */}
+                {task.kind !== 'lesson' && (
+                  <button
+                    type="button"
+                    onClick={() => onStatus(task, 'completed')}
+                    title="Mark done"
+                    className="rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-200"
+                  >
+                    ✓ Done
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onStatus(task, 'skipped')}

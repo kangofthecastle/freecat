@@ -319,7 +319,7 @@ export interface PlanProgressDto {
   streak: number
   completionRate: number | null
   onTrack: 'on-track' | 'neutral' | 'falling-behind' | null
-  skipRate: number | null // A5: displayed beside the streak so skips can't read as perfection
+  skipRate: number | null // A5: displayed beside the streak, over the streak's whole loaded history
 }
 
 /** Triangle raw material, present even before an exam date exists — the onboarding wizard runs the

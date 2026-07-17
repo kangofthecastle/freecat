@@ -1,6 +1,7 @@
 import type { PlanPoolDto } from '../../../shared/dto'
-import { validatePacing, type PacingEdit, type PacingResult } from '../../../shared/plan/pacing'
+import { habitPacing, validatePacing, type PacingEdit, type PacingResult } from '../../../shared/plan/pacing'
 import { addDaysToKey, dayNumberOfKey } from '../../../shared/gamification/dates'
+import { clampInt } from './int-input'
 
 /**
  * The pick-one-derive-the-other flashcard pacing editor, shared by the onboarding wizard and the
@@ -21,24 +22,16 @@ export interface TrianglePickerProps {
 }
 
 /** The live outcome for an edit, or null when nothing has been touched yet. Exported so the wizard
- *  can gate its "Continue" button on feasibility with the identical computation. */
+ *  can gate its "Continue" button on feasibility with the identical computation. Both branches call
+ *  the shared engine functions — nothing here re-derives pacing rules. */
 export function pacingOutcome(
-  props: Pick<TrianglePickerProps, 'pool' | 'todayKey' | 'examDate' | 'finishBufferDays' | 'edit'>
+  props: Pick<TrianglePickerProps, 'pool' | 'todayKey' | 'examDate' | 'finishBufferDays' | 'edit'> & {
+    currentDailyNew: number | null
+  }
 ): PacingResult | null {
   const { pool, todayKey, examDate, finishBufferDays, edit } = props
   if (!edit) return null
-  if (examDate == null) {
-    // Habit mode mirrors the engine: dailyNew stores directly (clamped), a goal is meaningless.
-    if (edit.field === 'dailyNew') {
-      const dailyNew = Math.min(pool.dailyNewCeiling, Math.max(0, Math.round(edit.value)))
-      return { ok: true, derived: { dailyNew, goalPct: 0 } }
-    }
-    return {
-      ok: false,
-      derived: { dailyNew: 0, goalPct: edit.value },
-      refusalReason: 'Set an exam date first — a mastery goal needs a finish date to pace against'
-    }
-  }
+  if (examDate == null) return habitPacing(edit, pool.dailyNewCeiling, props.currentDailyNew)
   const finishKey = addDaysToKey(examDate, -finishBufferDays)
   const daysToFinish = Math.max(0, dayNumberOfKey(finishKey) - dayNumberOfKey(todayKey))
   return validatePacing({
@@ -53,7 +46,7 @@ export function pacingOutcome(
 
 export function TrianglePicker(props: TrianglePickerProps): React.JSX.Element {
   const { pool, examDate, current, edit, onEdit } = props
-  const outcome = pacingOutcome(props)
+  const outcome = pacingOutcome({ ...props, currentDailyNew: current.dailyNewTarget })
 
   if (pool.deckSize === 0) {
     return (
@@ -64,14 +57,13 @@ export function TrianglePicker(props: TrianglePickerProps): React.JSX.Element {
     )
   }
 
-  // What each field shows: the touched field shows the user's raw value; the other shows the
-  // derived answer; before any touch, both show the persisted settings.
+  // What each field shows: the touched field shows the user's (already-clamped) value; the other
+  // shows the derived answer only when the edit is VALID — a refused edit must never overwrite the
+  // untouched field's persisted value with a placeholder. Before any touch, both show settings.
   const shownDailyNew =
-    edit?.field === 'dailyNew' ? edit.value : outcome?.derived.dailyNew ?? current.dailyNewTarget
+    edit?.field === 'dailyNew' ? edit.value : outcome?.ok ? outcome.derived.dailyNew : current.dailyNewTarget
   const shownGoal =
-    edit?.field === 'goalPct' ? edit.value : outcome && outcome.ok ? outcome.derived.goalPct : current.masteryGoalPct
-
-  const parse = (raw: string): number => Math.max(0, Math.floor(Number(raw) || 0))
+    edit?.field === 'goalPct' ? edit.value : outcome?.ok ? outcome.derived.goalPct : current.masteryGoalPct
 
   return (
     <div className="space-y-3">
@@ -83,7 +75,7 @@ export function TrianglePicker(props: TrianglePickerProps): React.JSX.Element {
             min={0}
             max={pool.dailyNewCeiling}
             value={shownDailyNew ?? ''}
-            onChange={(e) => onEdit({ field: 'dailyNew', value: parse(e.target.value) })}
+            onChange={(e) => onEdit({ field: 'dailyNew', value: clampInt(e.target.value, pool.dailyNewCeiling) })}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800"
           />
         </label>
@@ -95,7 +87,7 @@ export function TrianglePicker(props: TrianglePickerProps): React.JSX.Element {
             max={100}
             value={shownGoal ?? ''}
             disabled={examDate == null}
-            onChange={(e) => onEdit({ field: 'goalPct', value: Math.min(100, parse(e.target.value)) })}
+            onChange={(e) => onEdit({ field: 'goalPct', value: clampInt(e.target.value, 100) })}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 disabled:bg-gray-50 disabled:text-gray-400"
           />
         </label>

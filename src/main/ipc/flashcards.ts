@@ -61,7 +61,13 @@ export function registerFlashcardsIpc(db: DB, opts: FlashcardsIpcOptions = {}): 
   ipcMain.handle(CH.fcNextReviewCard, async (_e, raw: unknown) => {
     const deckId = reviewDeckIdSchema.parse(raw)
     // A broken settings read must never break the review queue — degrade to deck order.
-    const order = await (opts.newCardOrder?.() ?? Promise.resolve<NewCardOrder>('deck')).catch(() => 'deck' as const)
+    // try/catch (not promise .catch) so even a synchronously-throwing getter degrades.
+    let order: NewCardOrder = 'deck'
+    try {
+      order = (await opts.newCardOrder?.()) ?? 'deck'
+    } catch {
+      /* degrade to deck order */
+    }
     const next = await nextReviewCard(db, deckId, now(), order)
     if (next === null) return err('deck-not-found')
     if (next.done) return ok(next)

@@ -3,6 +3,7 @@ import type { PlanPoolDto, PlanSettingsDto, SavePlanSettingsInput } from '../../
 import type { PacingEdit } from '../../../shared/plan/pacing'
 import { TrianglePicker, pacingOutcome } from './TrianglePicker'
 import { ComfortEditor, type DisciplineRef } from './ComfortEditor'
+import { clampInt } from './int-input'
 
 /**
  * The four-step plan setup: exam date → flashcard pacing → discipline comfort → daily budget.
@@ -34,7 +35,10 @@ export function OnboardingWizard({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const outcome = pacingOutcome({ pool, todayKey, examDate, finishBufferDays: initial.finishBufferDays, edit: pacingEdit })
+  const outcome = pacingOutcome({
+    pool, todayKey, examDate, finishBufferDays: initial.finishBufferDays,
+    currentDailyNew: initial.dailyNewTarget, edit: pacingEdit
+  })
   // A refused (infeasible) goal blocks Continue; an untouched picker doesn't — pacing is optional.
   const pacingBlocked = outcome != null && !outcome.ok
 
@@ -42,9 +46,14 @@ export function OnboardingWizard({
     setSaving(true)
     setSaveError(null)
     try {
-      const input: SavePlanSettingsInput = { examDate, dailyBudgetMinutes: budget, onboarded: true }
-      if (pacingEdit) input.pacingEdit = pacingEdit
-      const res = await window.freecat.plan.saveSettings(input)
+      // Two-phase when a pacing edit exists: settings+pacing first, `onboarded` only once the
+      // engine ACCEPTS the pacing. savePlanSettings persists non-pacing fields even on a refusal,
+      // so a single combined call would mark onboarding done and this wizard would never reappear
+      // after a restart — breaking "abandoning the wizard persists no finished onboarding".
+      const base: SavePlanSettingsInput = { examDate, dailyBudgetMinutes: budget }
+      if (pacingEdit) base.pacingEdit = pacingEdit
+      else base.onboarded = true
+      const res = await window.freecat.plan.saveSettings(base)
       if (!res.ok) {
         setSaveError('Could not save your plan settings just now. Please try again.')
         return
@@ -55,6 +64,13 @@ export function OnboardingWizard({
         setSaveError(res.data.pacing.refusalReason ?? 'That pacing goal is not reachable.')
         setStep(1)
         return
+      }
+      if (pacingEdit) {
+        const onboardRes = await window.freecat.plan.saveSettings({ onboarded: true })
+        if (!onboardRes.ok) {
+          setSaveError('Could not save your plan settings just now. Please try again.')
+          return
+        }
       }
       const prefRows = Object.entries(comfort)
         .filter(([, v]) => v != null)
@@ -175,7 +191,7 @@ export function OnboardingWizard({
                 min={0}
                 max={720}
                 value={budget}
-                onChange={(e) => setBudget(Math.min(720, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+                onChange={(e) => setBudget(clampInt(e.target.value, 720))}
                 aria-label="Daily budget minutes"
                 className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-gray-800"
               />

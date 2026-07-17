@@ -314,9 +314,9 @@ describe('plan.day award (once per dayKey, by construction)', () => {
     await insertTask({ sortOrder: 2, kind: 'lesson', optional: true }) // stays pending, must not block
     const record = spy()
 
-    const first = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record }))
+    const first = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ }))
     expect(first.activity).toBeNull() // day not complete yet
-    const second = unwrap(await setPlanTaskStatus(db, { taskId: b, status: 'completed' }, NOW, { recordActivityFn: record }))
+    const second = unwrap(await setPlanTaskStatus(db, { taskId: b, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ }))
     expect(second.activity).not.toBeNull()
 
     expect(record).toHaveBeenCalledTimes(1)
@@ -327,9 +327,9 @@ describe('plan.day award (once per dayKey, by construction)', () => {
   it('un-complete then re-complete cannot double-award — the marker row is durable', async () => {
     const a = await insertTask()
     const record = spy()
-    await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record })
-    await setPlanTaskStatus(db, { taskId: a, status: 'pending' }, NOW, { recordActivityFn: record })
-    const again = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record }))
+    await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ })
+    await setPlanTaskStatus(db, { taskId: a, status: 'pending' }, NOW, { recordActivityFn: record, tz: TZ })
+    const again = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ }))
     expect(again.activity).toBeNull()
     expect(record).toHaveBeenCalledTimes(1)
   })
@@ -338,11 +338,11 @@ describe('plan.day award (once per dayKey, by construction)', () => {
     const a = await insertTask({ sortOrder: 0 })
     const b = await insertTask({ sortOrder: 1 })
     const record = spy()
-    await setPlanTaskStatus(db, { taskId: b, status: 'skipped' }, NOW, { recordActivityFn: record })
-    expect(unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record })).activity).not.toBeNull()
+    await setPlanTaskStatus(db, { taskId: b, status: 'skipped' }, NOW, { recordActivityFn: record, tz: TZ })
+    expect(unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ })).activity).not.toBeNull()
 
     const yesterday = await insertTask({ day: '2026-07-16' })
-    expect(unwrap(await setPlanTaskStatus(db, { taskId: yesterday, status: 'completed' }, NOW, { recordActivityFn: record })).activity).not.toBeNull()
+    expect(unwrap(await setPlanTaskStatus(db, { taskId: yesterday, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ })).activity).not.toBeNull()
     expect(record).toHaveBeenCalledTimes(2)
     expect(await db.select().from(planDayAward)).toHaveLength(2)
   })
@@ -352,8 +352,18 @@ describe('plan.day award (once per dayKey, by construction)', () => {
     const boom = vi.fn(async (): Promise<ServiceResult<ActivityResult>> => {
       throw new Error('boom')
     })
-    const res = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: boom }))
+    const res = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: boom, tz: TZ }))
     expect(res.task.status).toBe('completed')
     expect(res.activity).toBeNull()
+  })
+
+  it('never awards a FUTURE day — the horizon is materialized but not yet earned', async () => {
+    const tomorrow = await insertTask({ day: '2026-07-18' })
+    const record = spy()
+    const res = unwrap(await setPlanTaskStatus(db, { taskId: tomorrow, status: 'completed' }, NOW, { recordActivityFn: record, tz: TZ }))
+    expect(res.task.status).toBe('completed') // the status change itself is allowed
+    expect(res.activity).toBeNull()
+    expect(record).not.toHaveBeenCalled()
+    expect(await db.select().from(planDayAward)).toHaveLength(0)
   })
 })

@@ -17,7 +17,9 @@ export function ProgressStrip({ progress }: { progress: PlanProgressDto }): Reac
             <span aria-hidden>🔥</span>
             {progress.streak}
           </span>
-          {progress.skipRate != null && progress.skipRate > 0 && (
+          {/* Rendered even at 0% (A5): the disclosure must be unconditional or a clean week hides
+              older heavy skipping behind a bare streak number. */}
+          {progress.skipRate != null && (
             <span className="text-xs text-gray-400">{pct(progress.skipRate)} skipped</span>
           )}
         </div>

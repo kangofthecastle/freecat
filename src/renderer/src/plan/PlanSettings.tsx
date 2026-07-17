@@ -3,6 +3,7 @@ import type { PlanView, SavePlanSettingsInput } from '../../../shared/dto'
 import type { PacingEdit } from '../../../shared/plan/pacing'
 import { TrianglePicker } from './TrianglePicker'
 import { ComfortEditor, type DisciplineRef } from './ComfortEditor'
+import { clampInt } from './int-input'
 
 /**
  * The full settings panel: everything the wizard collects plus the knobs it deliberately skips
@@ -98,7 +99,7 @@ export function PlanSettings({
       min={0}
       max={max}
       value={value}
-      onChange={(e) => set(Math.min(max, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+      onChange={(e) => set(clampInt(e.target.value, max))}
       className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-gray-800"
     />
   )

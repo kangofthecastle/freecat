@@ -120,6 +120,37 @@ describe('onboarding wizard', () => {
     await screen.findByText('Plan streak')
   })
 
+  it('with a pacing edit, onboarded:true is sent ONLY after the engine accepts the pacing (two-phase)', async () => {
+    let current = makeView()
+    current.settings.onboardedAt = null
+    const calls: SavePlanSettingsInput[] = []
+    const handles = stub({
+      view: () => current,
+      saveSettings: async (input) => {
+        calls.push(input)
+        if (input.onboarded) current = makeView()
+        return ok<SavePlanSettingsResult>({
+          settings: current.settings,
+          pacing: input.pacingEdit ? { ok: true, derived: { dailyNew: 8, goalPct: 55 } } : null
+        })
+      }
+    })
+    render(<Plan />)
+    await screen.findByText('Set up your plan')
+
+    fireEvent.change(screen.getByLabelText('Exam date'), { target: { value: '2026-12-01' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }))
+    fireEvent.change(await screen.findByLabelText(/New cards \/ day/), { target: { value: '8' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Continue/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Start planning/ }))
+
+    await waitFor(() => expect(handles.saveSettings).toHaveBeenCalledTimes(2))
+    expect(calls[0]).toEqual({ examDate: '2026-12-01', dailyBudgetMinutes: 60, pacingEdit: { field: 'dailyNew', value: 8 } })
+    expect(calls[1]).toEqual({ onboarded: true })
+    await screen.findByText('Plan streak')
+  })
+
   it('an infeasible live goal blocks Continue on the pacing step', async () => {
     const current = makeView()
     current.settings.onboardedAt = null
@@ -143,6 +174,30 @@ describe('plan dashboard', () => {
     const tile = (await screen.findByText('Plan streak')).parentElement!
     expect(tile.textContent).toContain('3')
     expect(tile.textContent).toContain('25% skipped')
+  })
+
+  it('A5: a 0% skip-rate still renders — the disclosure is unconditional', async () => {
+    const view = makeView()
+    view.progress.skipRate = 0
+    stub({ view: () => view })
+    render(<Plan />)
+    const tile = (await screen.findByText('Plan streak')).parentElement!
+    expect(tile.textContent).toContain('0% skipped')
+  })
+
+  it('lesson tasks offer Read and Skip but never a manual Done (completion belongs to Content Review)', async () => {
+    const view = makeView()
+    view.days[0]!.tasks = [
+      task({ id: 9, kind: 'lesson', optional: true, refine: null, title: 'Lesson: Mechanics' })
+    ]
+    stub({ view: () => view })
+    const navigate = vi.fn()
+    render(<Plan navigate={navigate} />)
+
+    const read = await screen.findByRole('button', { name: 'Read' })
+    expect(screen.queryByRole('button', { name: /Done/ })).toBeNull()
+    fireEvent.click(read)
+    expect(navigate).toHaveBeenCalledWith('content', { lessonSlug: 'physics.mechanics' })
   })
 
   it('completing the day surfaces the plan.day celebration from the setTaskStatus ride-back', async () => {

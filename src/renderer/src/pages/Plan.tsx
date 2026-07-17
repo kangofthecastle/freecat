@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PageProps } from '../App'
 import type { ActivityResult, PlanTaskDto, PlanTaskStatus, PlanView } from '../../../shared/dto'
 import { REWARDS_CONFIG } from '../../../shared/gamification/config'
+import { dayNumberOfKey } from '../../../shared/gamification/dates'
+import { errorMessage } from '../gamification/labels'
 import { OnboardingWizard } from '../plan/OnboardingWizard'
 import { PlanSettings } from '../plan/PlanSettings'
 import { ProgressStrip } from '../plan/ProgressStrip'
@@ -18,14 +20,21 @@ export default function Plan(props: PageProps): React.JSX.Element {
   const [selectedDay, setSelectedDay] = useState<string | null>(null) // null = today
   const [celebration, setCelebration] = useState<ActivityResult | null>(null)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
+  // Overlapping loads (rapid Done/Skip clicks each refetch) may resolve out of order over IPC;
+  // only the newest request may land, or a stale snapshot would visually revert the later click.
+  const loadReqRef = useRef(0)
   const load = useCallback(async (): Promise<void> => {
+    const reqId = ++loadReqRef.current
     try {
-      setView(await window.freecat.plan.get())
+      const next = await window.freecat.plan.get()
+      if (reqId !== loadReqRef.current) return
+      setView(next)
       setLoadFailed(false)
     } catch (e) {
       console.error('Failed to load plan', e)
-      setLoadFailed(true)
+      if (reqId === loadReqRef.current) setLoadFailed(true)
     }
   }, [])
 
@@ -41,10 +50,17 @@ export default function Plan(props: PageProps): React.JSX.Element {
     async (task: PlanTaskDto, status: Exclude<PlanTaskStatus, 'expired'>): Promise<void> => {
       try {
         const res = await window.freecat.plan.setTaskStatus({ taskId: task.id, status })
-        if (res.ok && res.data.activity) setCelebration(res.data.activity)
-        if (res.ok && status !== 'completed') setCelebration(null)
+        if (res.ok) {
+          setActionError(null)
+          if (res.data.activity) setCelebration(res.data.activity)
+          else if (status !== 'completed') setCelebration(null)
+        } else {
+          // e.g. not-found when a debounced regeneration replaced the task under this click.
+          setActionError(errorMessage(res.error))
+        }
       } catch (e) {
         console.error('setTaskStatus failed', e)
+        setActionError('That change did not save just now. Please try again.')
       } finally {
         await load()
       }
@@ -52,10 +68,16 @@ export default function Plan(props: PageProps): React.JSX.Element {
     [load]
   )
 
-  /** Deep-link into the module that does the work; a pending task flips to 'started' on the way. */
+  /** Deep-link into the module that does the work; a pending task flips to 'started' on the way.
+   *  Fire-and-forget by design (navigation must not wait on the write) — remounting Plan reloads
+   *  fresh state, so the worst failure mode is a task still showing its pre-click label. */
   const openTask = useCallback(
     (task: PlanTaskDto): void => {
-      if (task.status === 'pending') void window.freecat.plan.setTaskStatus({ taskId: task.id, status: 'started' })
+      if (task.status === 'pending') {
+        window.freecat.plan
+          .setTaskStatus({ taskId: task.id, status: 'started' })
+          .catch((e) => console.error('mark-started failed', e))
+      }
       if (task.kind === 'flashcards') {
         navigate?.('flashcards')
       } else if (task.kind === 'lesson' && task.taxonomyRef) {
@@ -113,8 +135,9 @@ export default function Plan(props: PageProps): React.JSX.Element {
 
   const activeDay = selectedDay != null && view.days.some((d) => d.day === selectedDay) ? selectedDay : todayKey
   const dayEntry = view.days.find((d) => d.day === activeDay)
-  const daysToExam =
-    view.settings.examDate != null && view.triangle != null ? view.triangle.daysToFinish + view.settings.finishBufferDays : null
+  // Straight dayKey subtraction — the triangle's daysToFinish is buffer-shifted AND clamped at 0,
+  // so reconstructing from it overstates the countdown in the final pre-exam days.
+  const daysToExam = view.settings.examDate != null ? dayNumberOfKey(view.settings.examDate) - dayNumberOfKey(todayKey) : null
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
@@ -139,15 +162,30 @@ export default function Plan(props: PageProps): React.JSX.Element {
       </header>
 
       {showSettings ? (
-        <PlanSettings
-          view={view}
-          disciplines={disciplines}
-          onSaved={load}
-          onClose={() => setShowSettings(false)}
-        />
+        disciplines.length > 0 ? (
+          <PlanSettings
+            view={view}
+            disciplines={disciplines}
+            onSaved={load}
+            onClose={() => setShowSettings(false)}
+          />
+        ) : (
+          // The panel seeds its comfort/exclusion drafts from `disciplines` at mount; mounting it
+          // before they load would lock in empty drafts and a later Save would wipe stored ratings.
+          <p className="text-gray-500">Loading…</p>
+        )
       ) : (
         <>
           <ProgressStrip progress={view.progress} />
+
+          {actionError && (
+            <p role="alert" className="flex items-center justify-between rounded-xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-100">
+              {actionError}
+              <button type="button" onClick={() => setActionError(null)} className="text-amber-500 hover:text-amber-700" aria-label="Dismiss error">
+                ✕
+              </button>
+            </p>
+          )}
 
           {celebration && (
             <div

@@ -271,7 +271,8 @@ export function Composer({
         </div>
         {available !== null && available > 0 && available < count && (
           <p className="mt-3 text-sm text-gray-500">
-            Only {available} question{available === 1 ? '' : 's'} match — the session will be {available} long.
+            Only {available} question{available === 1 ? '' : 's'} match. Passages are always served
+            whole, so the session may run slightly longer than the match count.
           </p>
         )}
       </section>
