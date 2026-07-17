@@ -29,7 +29,7 @@ function emptyOverview(): StatsOverview {
     aamc: [],
     flashcards: {
       totalCards: 0, dueNow: 0, dueByDay: [], states: { learning: 0, review: 0, relearning: 0 },
-      introducedToday: 0, reviewsPerDay: [], againRate7d: null, againRate30d: null, lapsesTotal: 0
+      introducedToday: 0, againRate7d: null, againRate30d: null, lapsesTotal: 0
     }
   }
 }

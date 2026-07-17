@@ -27,7 +27,9 @@ export interface TopicFingerprint {
  *  (ported order, minus 'timeout': blank attempts are impossible by schema here). */
 const DOMINANCE_PRIORITY: ErrorMode[] = ['repeated_distractor', 'slow_wrong', 'careless_fast', 'standard']
 
-function median(values: number[]): number {
+/** Midpoint median (average of the two middles on even length). Exported so the pacing panel's
+ *  medians and the fingerprint time baselines share ONE implementation and can never drift. */
+export function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b)
   const mid = Math.floor(s.length / 2)
   return s.length % 2 === 0 ? (s[mid - 1]! + s[mid]!) / 2 : s[mid]!

@@ -53,7 +53,6 @@ export const STATS_CONFIG = {
   /** FSRS queue summary windows. */
   flashcards: {
     dueHorizonDays: 7, // due-by-day bars: today + 6
-    reviewsPerDayDays: 30,
     againRateWindows: { short: 7, long: 30 } as const
   },
 

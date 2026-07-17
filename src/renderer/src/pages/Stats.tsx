@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PageProps } from '../App'
 import type { StatsOverview } from '../../../shared/dto'
-import { StatTile } from '../stats/StatTile'
+import { StatTile } from '../components/StatTile'
 import { MasteryPanel } from '../stats/MasteryPanel'
 import { FingerprintsPanel } from '../stats/FingerprintsPanel'
 import { PacingPanel } from '../stats/PacingPanel'

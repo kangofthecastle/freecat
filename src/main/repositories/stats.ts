@@ -6,26 +6,23 @@ import type {
   TopicFingerprintDto, SectionPacingDto, AamcAccuracy, ChoiceLetter, DisciplineKey
 } from '../../shared/dto'
 import type { ContentIndex, SectionCode } from '../content/types'
-import { SECTION_BY_DISCIPLINE } from '../content/loader'
 import { CONTENT_TAG_VOCAB } from '../content/tags'
-import { DISCIPLINES, TOPICS } from '../db/seed/taxonomy-data'
+import {
+  DISCIPLINES, TOPICS, SECTIONS, SECTION_TITLE, SECTION_BY_DISCIPLINE
+} from '../db/seed/taxonomy-data'
 import { dayKeyInTz, addDaysToKey } from '../../shared/gamification/dates'
 import { STATS_CONFIG } from '../stats/config'
 import { computeMastery, type MasteryAttempt, type MasteryResult } from '../stats/mastery'
-import { classifyFingerprints, timeBaselines, fingerprintEvidence, type FingerprintAttempt } from '../stats/fingerprints'
+import {
+  classifyFingerprints, timeBaselines, fingerprintEvidence, median, type FingerprintAttempt
+} from '../stats/fingerprints'
 import { buildEffortTrend } from '../stats/effort'
 import { summarizeFlashcards } from '../stats/flashcard-load'
 import { listFlaggedIds } from './qbank-flags'
 import { appTz } from './activity'
 
-const SECTIONS: SectionCode[] = ['chem-phys', 'bio-biochem', 'psych-soc']
-const SECTION_TITLE: Record<SectionCode, string> = {
-  'chem-phys': 'Chem & Phys Foundations',
-  'bio-biochem': 'Bio & Biochem Foundations',
-  'psych-soc': 'Psych, Soc & Bio Foundations'
-}
-const DISCIPLINE_TITLE: ReadonlyMap<string, string> = new Map(DISCIPLINES.map((d) => [d.slug, d.title]))
 const TOPIC_TITLE: ReadonlyMap<string, string> = new Map(TOPICS.map((t) => [t.slug, t.title]))
+const TOPIC_DISCIPLINE: ReadonlyMap<string, DisciplineKey> = new Map(TOPICS.map((t) => [t.slug, t.discipline]))
 const AAMC_TITLE: ReadonlyMap<string, string> = new Map(
   CONTENT_TAG_VOCAB.map((t) => [`${t.vocab}:${t.code}`, t.title])
 )
@@ -52,12 +49,6 @@ const toMasteryDto = (r: MasteryResult, published: number): MasteryDto => ({
   stale: r.stale
 })
 
-function median(values: number[]): number {
-  const s = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(s.length / 2)
-  return s.length % 2 === 0 ? (s[mid - 1]! + s[mid]!) / 2 : s[mid]!
-}
-
 export interface StatsOptions {
   now?: Date
   tz?: string
@@ -74,20 +65,38 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
   const tz = opts.tz ?? appTz()
   const todayKey = dayKeyInTz(now, tz)
 
-  const attempts: AttemptRow[] = await db
-    .select({
-      id: qbankAttempt.id,
-      questionId: qbankAttempt.questionId,
-      topic: qbankAttempt.topic,
-      discipline: qbankAttempt.discipline,
-      section: qbankAttempt.section,
-      chosen: qbankAttempt.chosen,
-      isCorrect: qbankAttempt.isCorrect,
-      timeMs: qbankAttempt.timeMs,
-      answeredAt: qbankAttempt.answeredAt
-    })
-    .from(qbankAttempt)
-  const flaggedIds = new Set(await listFlaggedIds(db))
+  // The six reads are independent — issue them together rather than serializing round trips.
+  const [attempts, flaggedList, reviews, lessonsDone, activityRows, scheduling] = await Promise.all([
+    db
+      .select({
+        id: qbankAttempt.id,
+        questionId: qbankAttempt.questionId,
+        topic: qbankAttempt.topic,
+        discipline: qbankAttempt.discipline,
+        section: qbankAttempt.section,
+        chosen: qbankAttempt.chosen,
+        isCorrect: qbankAttempt.isCorrect,
+        timeMs: qbankAttempt.timeMs,
+        answeredAt: qbankAttempt.answeredAt
+      })
+      .from(qbankAttempt) as Promise<AttemptRow[]>,
+    listFlaggedIds(db),
+    db.select({ rating: reviewLog.rating, reviewedAt: reviewLog.reviewedAt }).from(reviewLog),
+    db
+      .select({ completedAt: lessonProgress.completedAt })
+      .from(lessonProgress)
+      .where(isNotNull(lessonProgress.completedAt)),
+    db.select({ dayKey: dailyActivity.dayKey, count: dailyActivity.count }).from(dailyActivity),
+    db
+      .select({
+        state: cardScheduling.state,
+        due: cardScheduling.due,
+        introducedDay: cardScheduling.introducedDay,
+        lapses: cardScheduling.lapses
+      })
+      .from(cardScheduling)
+  ])
+  const flaggedIds = new Set(flaggedList)
 
   // ── Latest attempt per question (mastery evidence; answeredAt then row id breaks ties) ──
   const latestByQuestion = new Map<string, AttemptRow>()
@@ -162,24 +171,36 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
       answeredAt: a.answeredAt
     }))
   const baselines = timeBaselines(windowed)
-  // Every fingerprint topic came from an attempt row, which carries its discipline denormalized.
+  // Discipline comes from the canonical taxonomy seed; the attempt row's denormalized column is
+  // only a fallback for a topic that has since left the seed (content drift), never the primary.
   const attemptDiscipline = new Map<string, DisciplineKey>()
   for (const a of attempts) attemptDiscipline.set(a.topic, a.discipline as DisciplineKey)
   const fingerprints: TopicFingerprintDto[] = classifyFingerprints(windowed, flaggedIds, baselines)
     .filter((fp) => fp.dominantMode !== null || fp.unsureCorrectCount > 0)
-    .map((fp) => ({
-      topic: fp.topic,
-      title: TOPIC_TITLE.get(fp.topic) ?? fp.topic,
-      discipline: attemptDiscipline.get(fp.topic)!,
-      mode: fp.dominantMode,
-      evidence: fingerprintEvidence(fp),
-      totalErrors: fp.totalErrors,
-      unsureCorrect: fp.unsureCorrectCount
-    }))
+    .flatMap((fp) => {
+      const discipline = TOPIC_DISCIPLINE.get(fp.topic) ?? attemptDiscipline.get(fp.topic)
+      if (!discipline) return []
+      return [{
+        topic: fp.topic,
+        title: TOPIC_TITLE.get(fp.topic) ?? fp.topic,
+        discipline,
+        mode: fp.dominantMode,
+        evidence: fingerprintEvidence(fp),
+        totalErrors: fp.totalErrors,
+        unsureCorrect: fp.unsureCorrectCount
+      }]
+    })
     .sort((a, b) => b.totalErrors - a.totalErrors)
 
+  // Pacing has its OWN window tunable — today equal to the fingerprint window, but honored
+  // independently so retuning one never silently drags the other.
+  const paceWindowStart = addDaysToKey(todayKey, -(STATS_CONFIG.pacing.windowDays - 1))
+  const paceAttempts =
+    STATS_CONFIG.pacing.windowDays === STATS_CONFIG.fingerprints.windowDays
+      ? windowed
+      : attempts.filter((a) => dayKeyInTz(a.answeredAt, tz) >= paceWindowStart)
   const pacing: SectionPacingDto[] = SECTIONS.map((section) => {
-    const times = windowed.filter((a) => a.section === section && a.timeMs != null).map((a) => a.timeMs!)
+    const times = paceAttempts.filter((a) => a.section === section && a.timeMs != null).map((a) => a.timeMs!)
     const hasBaseline = times.length >= STATS_CONFIG.pacing.minTimedForMedian
     const med = hasBaseline ? median(times) : null
     return {
@@ -193,13 +214,6 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
   })
 
   // ── Effort trend from raw module event streams ──
-  const reviews = await db
-    .select({ rating: reviewLog.rating, reviewedAt: reviewLog.reviewedAt })
-    .from(reviewLog)
-  const lessonsDone = await db
-    .select({ completedAt: lessonProgress.completedAt })
-    .from(lessonProgress)
-    .where(isNotNull(lessonProgress.completedAt))
   const effortFrom = addDaysToKey(todayKey, -(STATS_CONFIG.effort.trendDays - 1))
   const effortTrend = buildEffortTrend(
     {
@@ -214,9 +228,6 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
 
   // ── Heatmap straight off daily_activity — agrees exactly with what the pet economy rewarded ──
   const heatFrom = addDaysToKey(todayKey, -(STATS_CONFIG.heatmapWeeks * 7 - 1))
-  const activityRows = await db
-    .select({ dayKey: dailyActivity.dayKey, count: dailyActivity.count })
-    .from(dailyActivity)
   const byDay: Record<string, number> = {}
   for (const r of activityRows) {
     if (r.dayKey >= heatFrom && r.dayKey <= todayKey && r.count > 0) byDay[r.dayKey] = r.count
@@ -246,14 +257,6 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
     .sort((a, b) => a.code.localeCompare(b.code))
 
   // ── FSRS queue ──
-  const scheduling = await db
-    .select({
-      state: cardScheduling.state,
-      due: cardScheduling.due,
-      introducedDay: cardScheduling.introducedDay,
-      lapses: cardScheduling.lapses
-    })
-    .from(cardScheduling)
   const flashcards = summarizeFlashcards(scheduling, reviews, now, tz)
 
   return {

@@ -74,7 +74,5 @@ describe('summarizeFlashcards', () => {
     )
     expect(s.againRate7d).toBeCloseTo(1 / 2, 10)
     expect(s.againRate30d).toBeCloseTo(2 / 3, 10)
-    expect(s.reviewsPerDay).toHaveLength(30)
-    expect(s.reviewsPerDay.at(-1)).toMatchObject({ day: '2026-07-17', count: 1 })
   })
 })

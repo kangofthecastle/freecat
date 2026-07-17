@@ -55,7 +55,6 @@ export function summarizeFlashcards(
     dueByDay.push({ day, count: dueCounts.get(day) ?? 0 })
   }
 
-  const perDay = new Map<string, number>()
   let again7 = 0
   let total7 = 0
   let again30 = 0
@@ -65,7 +64,6 @@ export function summarizeFlashcards(
   for (const r of reviews) {
     const key = dayKeyInTz(r.reviewedAt, tz)
     if (key > todayKey) continue // defensive: clock skew never counts future reviews
-    perDay.set(key, (perDay.get(key) ?? 0) + 1)
     if (key >= startLong) {
       total30++
       if (r.rating === 1) again30++
@@ -75,11 +73,6 @@ export function summarizeFlashcards(
       }
     }
   }
-  const reviewsPerDay: { day: string; count: number }[] = []
-  const startTrend = addDaysToKey(todayKey, -(cfg.reviewsPerDayDays - 1))
-  for (let day = startTrend, i = 0; i < cfg.reviewsPerDayDays; day = addDaysToKey(day, 1), i++) {
-    reviewsPerDay.push({ day, count: perDay.get(day) ?? 0 })
-  }
 
   return {
     totalCards: scheduling.length,
@@ -87,7 +80,6 @@ export function summarizeFlashcards(
     dueByDay,
     states,
     introducedToday,
-    reviewsPerDay,
     againRate7d: total7 > 0 ? again7 / total7 : null,
     againRate30d: total30 > 0 ? again30 / total30 : null,
     lapsesTotal

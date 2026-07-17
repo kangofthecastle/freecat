@@ -11,7 +11,7 @@ import {
   type PassageQuestionInput
 } from './schema'
 import { isKnownTag } from './tags'
-import { TOPICS } from '../db/seed/taxonomy-data'
+import { TOPICS, SECTION_BY_DISCIPLINE } from '../db/seed/taxonomy-data'
 import { rewriteImagePaths } from './images'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,16 +80,7 @@ export interface ScanOptions {
   checkImages?: boolean // default true
 }
 
-/** Fixed discipline → MCAT section map (no CARS). Exported for the Stats rollup, which groups
- *  the same way (single source — a new discipline slots into both by editing this map once). */
-export const SECTION_BY_DISCIPLINE: Record<DisciplineKey, SectionCode> = {
-  'gen-chem': 'chem-phys',
-  'o-chem': 'chem-phys',
-  physics: 'chem-phys',
-  biology: 'bio-biochem',
-  biochem: 'bio-biochem',
-  'behavioral-sci': 'psych-soc'
-}
+// Discipline → section mapping is canonical taxonomy data, homed with the other seeds.
 
 /** topic slug → owning discipline, built once from the seeded taxonomy. */
 const topicToDiscipline: Map<string, DisciplineKey> = new Map(

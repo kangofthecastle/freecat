@@ -1,4 +1,24 @@
-import type { DisciplineKey } from '../../../shared/dto'
+import type { DisciplineKey, SectionCode } from '../../../shared/dto'
+
+/** Canonical section constants live HERE beside the discipline/topic seeds — one home for the
+ *  whole taxonomy (a new discipline or section is added by editing this file alone). */
+export const SECTIONS: SectionCode[] = ['chem-phys', 'bio-biochem', 'psych-soc']
+
+export const SECTION_TITLE: Record<SectionCode, string> = {
+  'chem-phys': 'Chem & Phys Foundations',
+  'bio-biochem': 'Bio & Biochem Foundations',
+  'psych-soc': 'Psych, Soc & Bio Foundations'
+}
+
+/** Fixed discipline → MCAT section map (no CARS — excluded from the app by charter §2). */
+export const SECTION_BY_DISCIPLINE: Record<DisciplineKey, SectionCode> = {
+  'gen-chem': 'chem-phys',
+  'o-chem': 'chem-phys',
+  physics: 'chem-phys',
+  biology: 'bio-biochem',
+  biochem: 'bio-biochem',
+  'behavioral-sci': 'psych-soc'
+}
 
 export const DISCIPLINES: { slug: DisciplineKey; title: string }[] = [
   { slug: 'gen-chem', title: 'General Chemistry' },

@@ -31,7 +31,7 @@ export function FlashcardsPanel({ load }: { load: FlashcardLoadDto }): React.JSX
         <Mini
           label="In rotation"
           value={String(load.totalCards)}
-          sub={`${load.states.learning} learning · ${load.states.review} review · ${load.states.relearning} relearning`}
+          sub={`${load.states.learning} learning · ${load.states.review} review · ${load.states.relearning} relearning · ${load.lapsesTotal} lapses`}
         />
       </div>
       <div className="flex items-end gap-2" role="img" aria-label="Cards due over the next seven days">

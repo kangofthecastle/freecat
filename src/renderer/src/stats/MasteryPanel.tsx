@@ -9,6 +9,12 @@ function sortTopics(topics: TopicStatsDto[]): TopicStatsDto[] {
   return [...scored, ...unscored]
 }
 
+/** "n/p" with the numerator clamped to published — content unpublished after being attempted must
+ *  never read "15/10 covered" (the same clamp computeMastery applies to its coverage fraction). */
+function covered(m: MasteryDto): string {
+  return `${Math.min(m.attempted, m.published)}/${m.published}`
+}
+
 function MasteryFigure({ m }: { m: MasteryDto }): React.JSX.Element {
   if (m.needsData) {
     return (
@@ -76,9 +82,7 @@ export function MasteryPanel({
                   <div className="mb-1.5 flex items-baseline justify-between gap-3">
                     <span className="text-sm font-semibold text-gray-700">{d.title}</span>
                     <span className="flex items-center gap-2 text-xs text-gray-400">
-                      <span>
-                        {d.mastery.attempted}/{d.mastery.published} covered
-                      </span>
+                      <span>{covered(d.mastery)} covered</span>
                       <MasteryFigure m={d.mastery} />
                     </span>
                   </div>
@@ -105,7 +109,7 @@ export function MasteryPanel({
                             ? t.mastery.attempted > 0
                               ? 'not enough data'
                               : 'no attempts'
-                            : `${t.mastery.attempted}/${t.mastery.published} covered${t.mastery.stale ? ' · stale' : ''}`}
+                            : `${covered(t.mastery)} covered${t.mastery.stale ? ' · stale' : ''}`}
                         </p>
                       </button>
                     ))}

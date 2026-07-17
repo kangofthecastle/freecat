@@ -3,6 +3,7 @@ import type { GamificationState } from '../../../shared/dto'
 import type { PageProps } from '../App'
 import { Pet } from '../components/Pet'
 import { Coin } from '../components/Coin'
+import { StatTile } from '../components/StatTile'
 import { petLabel } from '../gamification/labels'
 
 export default function Home({ navigate }: PageProps): React.JSX.Element {
@@ -135,24 +136,6 @@ export default function Home({ navigate }: PageProps): React.JSX.Element {
           )}
         </>
       )}
-    </div>
-  )
-}
-
-function StatTile({
-  label,
-  value,
-  children
-}: {
-  label: string
-  value: string
-  children?: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
-      {value !== '' && <p className="mt-0.5 text-2xl font-bold text-gray-800">{value}</p>}
-      {children}
     </div>
   )
 }

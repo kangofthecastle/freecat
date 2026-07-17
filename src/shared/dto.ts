@@ -209,7 +209,6 @@ export interface FlashcardLoadDto {
   dueByDay: { day: string; count: number }[] // horizon incl. today; overdue clamps into today
   states: { learning: number; review: number; relearning: number }
   introducedToday: number
-  reviewsPerDay: { day: string; count: number }[] // last 30 local days, zero-filled
   againRate7d: number | null // fraction of window reviews rated Again; null when no reviews
   againRate30d: number | null
   lapsesTotal: number

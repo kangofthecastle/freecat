@@ -77,9 +77,16 @@ export default function Qbank(props: PageProps): React.JSX.Element {
     <div>
       {showTabs && (
         <div className="border-b border-gray-100 bg-white px-8 pt-6">
-          <div className="mx-auto flex max-w-3xl gap-1">
+          <div className="mx-auto flex max-w-3xl items-center justify-between">
             <Tab label="Practice" active onClick={() => setView('composer')} />
-            <Tab label="Stats →" active={false} onClick={() => navigate?.('stats')} />
+            {/* Deliberately NOT a Tab: it navigates to the Stats page, not a local view. */}
+            <button
+              type="button"
+              onClick={() => navigate?.('stats')}
+              className="pb-2 text-sm font-medium text-blue-600 hover:underline"
+            >
+              Stats →
+            </button>
           </div>
         </div>
       )}
