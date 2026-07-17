@@ -138,17 +138,99 @@ export interface SubmitAnswerResult extends AnswerResult {
 export interface SessionSummaryRow { questionId: string; chosen: ChoiceLetter; isCorrect: boolean }
 export interface SessionSummary { sessionId: number; total: number; correct: number; rows: SessionSummaryRow[] }
 
-// ── Dashboard accuracy DTOs (by discipline/topic via SQL; by AAMC via JS over the content index) ──
-export interface TopicAccuracy { topic: string; title: string; discipline: DisciplineKey; answered: number; correct: number }
-export interface DisciplineAccuracy { discipline: DisciplineKey; title: string; answered: number; correct: number }
+// ── Stats (Module 4) DTOs — read-only overview computed live from raw tables, no caches ──
+/** Accuracy per AAMC content category (JS tally over the content index; a multi-tagged question
+ *  counts once per tag — intentional double-count, captioned in the UI). */
 export interface AamcAccuracy { code: string; title: string; answered: number; correct: number }
-export interface DashboardStats {
-  totalAnswered: number
-  totalCorrect: number
-  byDiscipline: DisciplineAccuracy[]
-  byTopic: TopicAccuracy[]
-  byAamc: AamcAccuracy[] // computed in JS over the content index
-  latestIncorrectQuestionIds: string[]
+
+/** Dominant error mode for a topic's recent misses (60-local-day window). No 'timeout' mode:
+ *  blank attempts are impossible by schema (`chosen` is non-null). */
+export type ErrorMode = 'repeated_distractor' | 'careless_fast' | 'slow_wrong' | 'standard'
+
+/** Bayesian mastery for one node of the section→discipline→topic tree. `needsData` means
+ *  "don't render this as a score" — the whole point is refusing false precision. */
+export interface MasteryDto {
+  mastery: number // shrunk success rate in [0,1]
+  nEff: number // evidence mass (recency-decayed)
+  coverage: number // distinct attempted / published, clamped to [0,1]
+  attempted: number // distinct questions with a latest attempt
+  published: number
+  needsData: boolean
+  stale: boolean // latest attempt older than the staleness threshold
+}
+export interface TopicStatsDto { topic: string; title: string; mastery: MasteryDto }
+export interface DisciplineStatsDto {
+  discipline: DisciplineKey
+  title: string
+  mastery: MasteryDto
+  topics: TopicStatsDto[]
+}
+export interface SectionStatsDto {
+  section: SectionCode
+  title: string
+  mastery: MasteryDto
+  disciplines: DisciplineStatsDto[]
+}
+
+export interface TopicFingerprintDto {
+  topic: string
+  title: string
+  discipline: DisciplineKey
+  mode: ErrorMode | null // null = no recent misses (row exists for its unsureCorrect signal)
+  evidence: string // factual clause composed in the pure layer; renderer never re-derives
+  totalErrors: number
+  unsureCorrect: number // correct but currently flagged — a confidence signal, never an error
+}
+
+/** Per-section pacing, self-relative. `medianMs` is null under the baseline minimum —
+ *  no number beats a fake number. `referenceMs` is the AAMC pace, rendered as a labeled
+ *  reference line only, never a judgment threshold. */
+export interface SectionPacingDto {
+  section: SectionCode
+  title: string
+  medianMs: number | null
+  timedCount: number
+  outlierCount: number // timed attempts slower than outlierMultiplier × own median
+  referenceMs: number
+}
+
+export interface EffortDayDto {
+  day: string // local dayKey
+  questions: number
+  flashcardReviews: number
+  lessonsCompleted: number
+  points: number // questions×3 + reviews×0.25 + lessons×10 (weights in STATS_CONFIG)
+}
+
+/** FSRS queue description — deliberately descriptive, never a forecast (forecasting is Plan's job). */
+export interface FlashcardLoadDto {
+  totalCards: number // cards with a scheduling row (introduced, i.e. not 'new')
+  dueNow: number
+  dueByDay: { day: string; count: number }[] // horizon incl. today; overdue clamps into today
+  states: { learning: number; review: number; relearning: number }
+  introducedToday: number
+  againRate7d: number | null // fraction of window reviews rated Again; null when no reviews
+  againRate30d: number | null
+  lapsesTotal: number
+}
+
+export interface StatsTotalsDto {
+  answered: number // attempt rows (per-session grading events)
+  correct: number
+  distinctQuestions: number
+  reviews: number // flashcard ratings applied, all-time
+  lessonsCompleted: number
+}
+
+export interface StatsOverview {
+  totals: StatsTotalsDto
+  sections: SectionStatsDto[] // the 3 content sections (no CARS — no taxonomy to hang it on)
+  fingerprints: TopicFingerprintDto[] // topics with recent misses or unsure-correct signal
+  pacing: SectionPacingDto[]
+  effortTrend: EffortDayDto[] // last trendDays local days, zero-filled, oldest→newest
+  heatmap: { byDay: Record<string, number>; todayKey: string; weeks: number } // from daily_activity
+  aamc: AamcAccuracy[]
+  flashcards: FlashcardLoadDto
 }
 
 // --- Flashcards DTOs ---

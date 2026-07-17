@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PageProps } from '../App'
 import type { StartSessionInput, StartSessionResult } from '../../../shared/dto'
-import { Composer, type InitialScope } from '../qbank/Composer'
+import { Composer } from '../qbank/Composer'
 import { Session, type SessionRecord } from '../qbank/Session'
 import { SessionSummary } from '../qbank/SessionSummary'
-import { Dashboard } from '../qbank/Dashboard'
 import { Explanation } from '../qbank/Explanation'
 
-type View = 'composer' | 'session' | 'summary' | 'dashboard'
+type View = 'composer' | 'session' | 'summary'
 
 /** Auto-start length when arriving via a topic deep-link (matches the Composer default). */
 const DEEPLINK_COUNT = 10
@@ -15,7 +14,6 @@ const DEEPLINK_COUNT = 10
 export default function Qbank(props: PageProps): React.JSX.Element {
   const { navigate, navPayload } = props
   const [view, setView] = useState<View>('composer')
-  const [scope, setScope] = useState<InitialScope | undefined>(undefined)
   const [session, setSession] = useState<StartSessionResult | null>(null)
   const [record, setRecord] = useState<SessionRecord | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
@@ -68,25 +66,27 @@ export default function Qbank(props: PageProps): React.JSX.Element {
 
   const newSession = useCallback((): void => {
     setRecord(null)
-    setScope(undefined)
     setView('composer')
   }, [])
 
-  const openScoped = useCallback((next: InitialScope): void => {
-    setScope(next)
-    setView('composer')
-  }, [])
-
-  // The composer/dashboard tabs are only meaningful outside an active session/summary.
-  const showTabs = view === 'composer' || view === 'dashboard'
+  // Analytics live in the Stats module (which absorbed the old qbank dashboard); the tab bar
+  // keeps a plain nav link there so the old "Dashboard" muscle memory still lands somewhere.
+  const showTabs = view === 'composer'
 
   return (
     <div>
       {showTabs && (
         <div className="border-b border-gray-100 bg-white px-8 pt-6">
-          <div className="mx-auto flex max-w-3xl gap-1">
-            <Tab label="Practice" active={view === 'composer'} onClick={() => setView('composer')} />
-            <Tab label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
+          <div className="mx-auto flex max-w-3xl items-center justify-between">
+            <Tab label="Practice" active onClick={() => setView('composer')} />
+            {/* Deliberately NOT a Tab: it navigates to the Stats page, not a local view. */}
+            <button
+              type="button"
+              onClick={() => navigate?.('stats')}
+              className="pb-2 text-sm font-medium text-blue-600 hover:underline"
+            >
+              Stats →
+            </button>
           </div>
         </div>
       )}
@@ -98,7 +98,7 @@ export default function Qbank(props: PageProps): React.JSX.Element {
               <p className="rounded-lg bg-amber-50 p-4 text-amber-800">{startError}</p>
             </div>
           )}
-          <Composer initialScope={scope} onStart={start} />
+          <Composer onStart={start} />
         </>
       )}
 
@@ -118,12 +118,10 @@ export default function Qbank(props: PageProps): React.JSX.Element {
           questions={record.questions}
           answers={record.answers}
           onNewSession={newSession}
-          onViewDashboard={() => setView('dashboard')}
+          onViewStats={() => navigate?.('stats')}
           navigate={navigate}
         />
       )}
-
-      {view === 'dashboard' && <Dashboard onScope={openScoped} />}
     </div>
   )
 }

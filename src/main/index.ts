@@ -8,6 +8,7 @@ import { registerContentReviewIpc } from './ipc/content-review'
 import { registerTaxonomyIpc } from './ipc/taxonomy'
 import { registerQbankIpc } from './ipc/qbank'
 import { registerFlashcardsIpc } from './ipc/flashcards'
+import { registerStatsIpc } from './ipc/stats'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { TOPICS } from './db/seed/taxonomy-data'
@@ -125,6 +126,7 @@ app.whenReady().then(async () => {
   registerTaxonomyIpc(db)
   registerQbankIpc(db, index)
   registerFlashcardsIpc(db)
+  registerStatsIpc(db, index)
 
   protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
 

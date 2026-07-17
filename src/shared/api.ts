@@ -2,7 +2,7 @@ import type {
   ProfileDto, GamificationState, ActivityResult, RecordActivityInput, ServiceResult, PetView,
   Outline, LessonDetail, LessonRef, MarkCompleteResult,
   DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
-  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, DashboardStats, QuestionRef,
+  SubmitAnswerInput, SubmitAnswerResult, SessionSummary, StatsOverview, QuestionRef,
   DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardView,
   ReviewCounts, ReviewQueueItem, ReviewRating, ReviewCardResult
 } from './dto'
@@ -41,8 +41,10 @@ export interface FreecatApi {
     submitAnswer: (input: SubmitAnswerInput) => Promise<ServiceResult<SubmitAnswerResult>>
     completeSession: (sessionId: number) => Promise<SessionSummary>
     toggleFlag: (questionId: string) => Promise<ServiceResult<{ flagged: boolean }>>
-    dashboard: () => Promise<DashboardStats>
     questionsForTaxonomy: (topicSlug: string) => Promise<QuestionRef[]>
+  }
+  stats: {
+    overview: () => Promise<StatsOverview>
   }
   flashcards: {
     importDeck: () => Promise<ServiceResult<DeckSetSummary>>

@@ -61,7 +61,11 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
         ┌───────▼──────┐ ┌──────▼───────┐ ┌─────▼────────┐
         │  1. Qbank    │ │ 2. Content   │ │ 3. Flashcards│
         │  (the heart) │ │    Review    │ │  (deep Anki) │
-        └──────────────┘ └──────────────┘ └──────────────┘
+        └───────┬──────┘ └──────┬───────┘ └─────┬────────┘
+                │               │               │
+        ┌───────▼───────────────▼───────────────▼────────┐
+        │        4. Stats (read-only analytics)           │
+        └─────────────────────────────────────────────────┘
 ```
 
 **What lives where (and why parallel work is still safe):** the **module-agnostic** contracts live in the Foundation, built once up front — the base DB schema + repository/IPC conventions, the gamification API, navigation slots, and the design system. Two **shared, content-shaped** contracts — the **MCAT taxonomy** and the **authored-content pipeline** — encode product decisions; they were **settled by Content Review (PR #5)** and Qbank is **reconciled onto them** (§5.1/§5.5). Each module owns only its own tables and screens and otherwise consumes these shared pieces — never forking them. Consequence: **Qbank and Content Review share the content model — Content Review landed it first and Qbank reconciles onto it; Flashcards is independent** (its content is imported) and can go anytime.
@@ -75,6 +79,8 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 - **Module 2 — Content Review** (lessons). **Built (PR #5)** — it settled the shared discipline→topic taxonomy + content pipeline v0. Readable topic lessons from bundled content files, cross-linked to Qbank through the shared topic slug (miss a question → jump to the lesson; finish a lesson → practice it). Completion feeds gamification.
 
 - **Module 3 — Flashcards** (deep Anki). A faithful local Anki reviewer; the most self-contained module — its content is user-imported (bring-your-own decks), so it integrates loosely (tag-based) rather than through the authored-content pipeline. **Deep-B scope:** import `.apkg`/`.colpkg` (legacy and modern zstd/protobuf formats), general note-type/template rendering, cloze, media (image + audio), MathJax, tags + deck/subdeck tree, **FSRS** scheduling, honoring a deck's existing scheduling history when present, and **image occlusion** (the single biggest lift). Out: AnkiWeb sync, export to `.apkg`, filtered decks, arbitrary add-ons. (`ts-fsrs` is a candidate library; sat-world's `src/lib/srs/*` is a reference/fallback, not FSRS.)
+
+- **Module 4 — Stats** (read-only analytics). **Built** (spec `2026-07-17-stats-design.md`; part of the SAT World port roadmap `2026-07-17-satworld-port-roadmap.md`). Bayesian per-topic mastery rolled up section→discipline→topic, error fingerprints, self-relative pacing, activity heatmap, effort trend, and the FSRS queue — computed live from the other modules' raw tables on every open (no rollups/caches, no migration). Owns **no tables and no writes**; absorbed the old qbank accuracy dashboard. Plan (Module 5, exam-date pacing) builds on top of it in roadmap Phases 2–4.
 
 **Recommended build order:** Foundation → Qbank → Content Review → Flashcards. After the Foundation, order is flexible.
 
@@ -104,6 +110,7 @@ One SQLite file, one Drizzle schema, split by ownership:
 - **Qbank owns:** question attempts, practice sessions, flags. The shared **`taxonomy_node`** table was established by **Content Review** (§5.1) and Qbank reconciles onto it; authored content (questions, lessons) is loaded into **in-memory indices**, not registry tables. The `topic_aamc_category` bridge is retired in favor of per-item tags.
 - **Content Review owns:** lesson progress.
 - **Flashcards owns:** imported decks, notes, note types/templates, cards, media references, and per-card scheduling/review state.
+- **Stats owns:** nothing — strictly read-only over qbank/flashcards/content/gamification data (spec `2026-07-17-stats-design.md`). It never writes any table, including gamification (looking at your stats is not study).
 
 Modules add their own tables and migrations; they reference Foundation tables by id but never alter Foundation-owned tables' meaning.
 

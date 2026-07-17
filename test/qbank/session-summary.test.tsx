@@ -42,7 +42,7 @@ describe('SessionSummary status glyph accessibility (WCAG 1.4.1)', () => {
         questions={questions}
         answers={{}}
         onNewSession={() => {}}
-        onViewDashboard={() => {}}
+        onViewStats={() => {}}
       />
     )
     // Each row's status indicator is reachable by its accessible name.
