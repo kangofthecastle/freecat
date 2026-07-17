@@ -6,6 +6,8 @@ import type {
   ChoiceLetter, ServiceResult, Tag
 } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
+import { DIAGNOSTIC_CONFIG } from '../../shared/qbank/diagnostic'
+import { DISCIPLINES } from '../db/seed/taxonomy-data'
 import { createSession } from '../repositories/qbank-sessions'
 import { recordAttempt, attemptExists, latestIncorrectQuestionIds, getSessionAttempts } from '../repositories/qbank-attempts'
 import { listFlaggedIds } from '../repositories/qbank-flags'
@@ -125,6 +127,16 @@ export async function planSession(
   })
 
   // 5. strip to PresentedQuestion[] + a passages map for referenced passages (no answers).
+  return { sessionId: session.id, mode: session.mode, ...presentChosen(index, chosenIds, flaggedSet) }
+}
+
+/** Strip chosen ids to the renderer-facing payload: presented questions plus every referenced
+ *  passage (never the answer key). Shared by both composers. */
+function presentChosen(
+  index: ContentIndex,
+  chosenIds: string[],
+  flaggedSet: Set<string>
+): { questions: PresentedQuestion[]; passages: Record<string, PresentedPassage> } {
   const questions: PresentedQuestion[] = []
   const passages: Record<string, PresentedPassage> = {}
   for (const id of chosenIds) {
@@ -136,8 +148,99 @@ export async function planSession(
       if (p) passages[q.passageId] = { id: p.id, passage: p.passage }
     }
   }
+  return { questions, passages }
+}
 
-  return { sessionId: session.id, mode: session.mode, questions, passages }
+/**
+ * Preference-ordered candidate units for one discipline's diagnostic picks: mid-difficulty
+ * standalones first (round-robin across topics for spread), then the other standalones, then whole
+ * passage units — a last resort so a passage-only discipline still gets probed, at the cost of the
+ * passage's full length riding along (atomicity, as everywhere).
+ */
+function diagnosticUnits(index: ContentIndex, discipline: string, rng: Rng): string[][] {
+  const mediumByTopic = new Map<string, string[]>()
+  const otherByTopic = new Map<string, string[]>()
+  const passageIds: string[] = []
+  const seenPassage = new Set<string>()
+  for (const id of index.byDiscipline.get(discipline) ?? []) {
+    const q = index.byId.get(id)
+    if (!q) continue
+    if (q.passageId) {
+      if (!seenPassage.has(q.passageId)) {
+        seenPassage.add(q.passageId)
+        passageIds.push(q.passageId)
+      }
+      continue
+    }
+    const bucket = q.difficulty === 'medium' ? mediumByTopic : otherByTopic
+    const arr = bucket.get(q.topic) ?? []
+    arr.push(id)
+    bucket.set(q.topic, arr)
+  }
+  // Interleave topics (shuffled within and across) so consecutive picks from one discipline probe
+  // DIFFERENT topics — the whole point of a diagnostic is spread, not depth.
+  const roundRobin = (byTopic: Map<string, string[]>): string[] => {
+    const lanes = shuffle([...byTopic.values()].map((arr) => shuffle(arr, rng)), rng)
+    const out: string[] = []
+    for (let i = 0; lanes.some((l) => i < l.length); i++) {
+      for (const lane of lanes) {
+        const id = lane[i]
+        if (id !== undefined) out.push(id)
+      }
+    }
+    return out
+  }
+  const units: string[][] = [...roundRobin(mediumByTopic), ...roundRobin(otherByTopic)].map((id) => [id])
+  for (const pid of shuffle(passageIds, rng)) {
+    const p = index.passagesById.get(pid)
+    if (p) units.push([...p.questionIds])
+  }
+  return units
+}
+
+/**
+ * Compose the cold-start diagnostic (roadmap Phase 4): a few mid-difficulty questions from EVERY
+ * discipline, so the planner's comfort priors meet real evidence early. Round-robin across
+ * disciplines up to `perDisciplineCap` questions each and `targetTotal` overall — a thin bank
+ * degrades to whatever exists (never blocks on missing content). The mode is server-assigned:
+ * no IPC input can request 'diagnostic'. Attempts recorded here are ordinary mastery evidence by
+ * design — nothing anywhere filters attempts by session mode.
+ */
+export async function planDiagnosticSession(
+  index: ContentIndex,
+  db: DB,
+  opts: PlanOptions
+): Promise<StartSessionResult> {
+  const flaggedSet = new Set(await listFlaggedIds(db))
+
+  const lanes = shuffle(
+    DISCIPLINES.map((d) => ({ units: diagnosticUnits(index, d.slug, opts.rng), taken: 0 })),
+    opts.rng
+  )
+  const chosenIds: string[] = []
+  let progressed = true
+  while (chosenIds.length < DIAGNOSTIC_CONFIG.targetTotal && progressed) {
+    progressed = false
+    for (const lane of lanes) {
+      if (chosenIds.length >= DIAGNOSTIC_CONFIG.targetTotal) break
+      if (lane.taken >= DIAGNOSTIC_CONFIG.perDisciplineCap) continue
+      const unit = lane.units.shift()
+      if (!unit) continue
+      chosenIds.push(...unit)
+      lane.taken += unit.length
+      progressed = true
+    }
+  }
+
+  const session = await createSession(db, {
+    mode: 'diagnostic',
+    scopeKind: 'mixed',
+    scopeCode: null,
+    refine: 'all',
+    requestedCount: DIAGNOSTIC_CONFIG.targetTotal,
+    now: opts.now
+  })
+  return { sessionId: session.id, mode: session.mode, ...presentChosen(index, chosenIds, flaggedSet) }
 }
 
 export async function gradeAndRecord(

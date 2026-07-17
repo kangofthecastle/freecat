@@ -55,7 +55,11 @@ function sessionResult(over: Partial<StartSessionResult> = {}): StartSessionResu
   }
 }
 
-function stub(startSession: StartSession, availability: AvailabilityQuestionDto[] = AVAILABILITY): void {
+function stub(
+  startSession: StartSession,
+  availability: AvailabilityQuestionDto[] = AVAILABILITY,
+  startDiagnostic: () => Promise<StartSessionResult> = async () => sessionResult({ mode: 'diagnostic' })
+): void {
   const freecat = {
     taxonomy: {
       list: async () => DISCIPLINES,
@@ -63,6 +67,7 @@ function stub(startSession: StartSession, availability: AvailabilityQuestionDto[
     },
     qbank: {
       startSession,
+      startDiagnostic,
       availability: async () => availability
     }
   }
@@ -182,6 +187,39 @@ describe('Qbank plan-session deep-link (qbankSession payload)', () => {
 
     rerender(<Qbank navPayload={{ qbankSession: { scopeKind: 'mixed', refine: 'incorrect', count: 6 } }} />)
     await waitFor(() => expect(startSession).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('Qbank diagnostic deep-link (qbankDiagnostic payload)', () => {
+  it('starts the server-composed diagnostic once under StrictMode and shows the mode badge', async () => {
+    const startSession = vi.fn(async () => sessionResult())
+    const startDiagnostic = vi.fn(async () => sessionResult({ mode: 'diagnostic' }))
+    stub(startSession, AVAILABILITY, startDiagnostic)
+
+    render(
+      <StrictMode>
+        <Qbank navPayload={{ qbankDiagnostic: { start: true } }} />
+      </StrictMode>
+    )
+    await screen.findByText(/Question 1 of/i)
+    expect(startDiagnostic).toHaveBeenCalledTimes(1)
+    expect(startSession).not.toHaveBeenCalled()
+    // The session header carries the diagnostic badge.
+    expect(screen.getByText('Diagnostic')).toBeTruthy()
+  })
+
+  it('an empty bank surfaces the diagnostic-specific empty message on the composer', async () => {
+    const startDiagnostic = vi.fn(async () => sessionResult({ mode: 'diagnostic', questions: [] }))
+    stub(vi.fn(async () => sessionResult()), AVAILABILITY, startDiagnostic)
+
+    render(
+      <StrictMode>
+        <Qbank navPayload={{ qbankDiagnostic: { start: true } }} />
+      </StrictMode>
+    )
+    await screen.findByText(/diagnostic needs at least a few published questions/i)
+    expect(screen.queryByText(/Question 1 of/i)).toBeNull()
+    expect(startDiagnostic).toHaveBeenCalledTimes(1)
   })
 })
 

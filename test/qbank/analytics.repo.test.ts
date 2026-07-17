@@ -21,7 +21,7 @@ function q(id: string, topic: string, discipline: string, tags: QuestionContent[
   return {
     id, topic, discipline: discipline as QuestionContent['discipline'], section: 'chem-phys',
     tags, passageId: null, stem: 's', choices: ['a', 'b', 'c', 'd'],
-    correct: 'A', explanation: 'e', choiceExplanations: {}
+    correct: 'A', explanation: 'e', choiceExplanations: {}, difficulty: 'medium'
   }
 }
 

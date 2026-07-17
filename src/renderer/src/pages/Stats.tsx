@@ -3,6 +3,7 @@ import type { PageProps } from '../App'
 import type { StatsOverview } from '../../../shared/dto'
 import { StatTile } from '../components/StatTile'
 import { MasteryPanel } from '../stats/MasteryPanel'
+import { MasteryTrendPanel } from '../stats/MasteryTrendPanel'
 import { FingerprintsPanel } from '../stats/FingerprintsPanel'
 import { PacingPanel } from '../stats/PacingPanel'
 import { HeatmapPanel } from '../stats/HeatmapPanel'
@@ -80,7 +81,12 @@ export default function Stats(props: PageProps): React.JSX.Element {
       </section>
 
       <MasteryPanel sections={overview.sections} onTopic={practiceTopic} />
-      <FingerprintsPanel fingerprints={overview.fingerprints} onTopic={practiceTopic} />
+      <MasteryTrendPanel trend={overview.masteryTrend} />
+      <FingerprintsPanel
+        fingerprints={overview.fingerprints}
+        window={overview.fingerprintWindow}
+        onTopic={practiceTopic}
+      />
       <PacingPanel pacing={overview.pacing} />
       <FlashcardsPanel load={overview.flashcards} />
       <HeatmapPanel

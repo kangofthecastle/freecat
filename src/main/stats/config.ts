@@ -10,13 +10,19 @@ export const STATS_CONFIG = {
     priorP0: 0.5, // prior success probability
     stalenessDays: 14, // latest attempt older than this ⇒ topic flagged stale
     flaggedCorrectWeight: 0.5, // a currently-flagged CORRECT answer counts at half evidence weight
-    needsDataNEff: 2 // n_eff below this renders as "needs data", never a score
+    needsDataNEff: 2, // n_eff below this renders as "needs data", never a score
+    trendDays: 90 // as-of-day mastery trend span (Phase 4) — recomputed live, no snapshots
   },
 
   /** Error-fingerprint classifier. Windowed (60 local days) — the deliberate fix for the
    *  all-time-aggregation flaw tracked as B9 in the sat-world findings catalogue. */
   fingerprints: {
     windowDays: 60,
+    // Phase 4 tuning: at personal scale a fixed window can starve the classifier (a light month ⇒
+    // nothing to diagnose). Fewer attempts than this inside the window ⇒ widen backward in whole
+    // days until it holds this many (or all history). Pacing's window is deliberately NOT tied
+    // to this — retuning one must never silently drag the other.
+    minWindowAttempts: 20,
     minTimedAttemptsForBaseline: 5, // per-section median needs ≥ this many timed attempts, else time buckets inactive
     carelessFastMultiplier: 0.5, // wrong ∧ timeMs < 0.5× section median ⇒ careless-fast
     slowWrongMultiplier: 1.5, // wrong ∧ timeMs > 1.5× section median ⇒ slow-wrong

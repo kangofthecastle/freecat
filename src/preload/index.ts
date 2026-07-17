@@ -32,6 +32,7 @@ const api: FreecatApi = {
   },
   qbank: {
     startSession: (input) => ipcRenderer.invoke(CH.qbankStartSession, input),
+    startDiagnostic: () => ipcRenderer.invoke(CH.qbankStartDiagnostic),
     submitAnswer: (input) => ipcRenderer.invoke(CH.qbankSubmitAnswer, input),
     completeSession: (sessionId) => ipcRenderer.invoke(CH.qbankCompleteSession, sessionId),
     toggleFlag: (questionId) => ipcRenderer.invoke(CH.qbankToggleFlag, questionId),

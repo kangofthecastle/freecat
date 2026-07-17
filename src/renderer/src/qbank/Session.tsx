@@ -15,6 +15,7 @@ export interface SessionRecord {
   summary: SessionSummary
   questions: PresentedQuestion[]
   answers: Record<string, AnswerResult>
+  mode: string // session mode, so the summary can speak diagnostic-appropriately
 }
 
 export function Session({
@@ -74,7 +75,7 @@ export function Session({
     setError(null)
     try {
       const summary = await window.freecat.qbank.completeSession(session.sessionId)
-      onComplete({ summary, questions: session.questions, answers })
+      onComplete({ summary, questions: session.questions, answers, mode: session.mode })
     } catch (e) {
       console.error('completeSession threw', e)
       setError('We could not finish the session. Please try again.')
@@ -109,9 +110,16 @@ export function Session({
   const body = (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-gray-500">
-          Question {index + 1} of {total}
-        </p>
+        <div className="flex items-center gap-2">
+          {session.mode === 'diagnostic' && (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
+              Diagnostic
+            </span>
+          )}
+          <p className="text-sm font-medium text-gray-500">
+            Question {index + 1} of {total}
+          </p>
+        </div>
         <div className="h-2 w-40 overflow-hidden rounded-full bg-gray-100">
           <div
             className="h-full rounded-full bg-blue-500 transition-[width]"

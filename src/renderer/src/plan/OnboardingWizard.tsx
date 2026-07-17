@@ -1,31 +1,37 @@
 import { useState } from 'react'
 import type { PlanPoolDto, PlanSettingsDto, SavePlanSettingsInput } from '../../../shared/dto'
 import type { PacingEdit } from '../../../shared/plan/pacing'
+import { DIAGNOSTIC_CONFIG } from '../../../shared/qbank/diagnostic'
 import { TrianglePicker, pacingOutcome } from './TrianglePicker'
 import { ComfortEditor, type DisciplineRef } from './ComfortEditor'
 import { clampInt } from './int-input'
 
 /**
- * The four-step plan setup: exam date → flashcard pacing → discipline comfort → daily budget.
+ * The four-step plan setup: exam date → flashcard pacing → discipline comfort → daily budget,
+ * then a post-save diagnostic offer (cold-start calibration; entirely optional).
  *
  * Everything is LOCAL STATE until the final step, which issues exactly one `saveSettings` call
  * (plus one `savePrefs` for rated disciplines) and only then tells the parent to refetch. This is
  * the deliberate defense against the onboarding-unmount-on-save regression sat-world hit in its
  * PR #35: no intermediate save can flip `onboardedAt` and cause the parent to swap this component
- * out from under the user mid-flow. Abandoning the wizard persists nothing.
+ * out from under the user mid-flow. Abandoning the wizard persists nothing. (The offer screen
+ * renders AFTER everything is committed — abandoning it loses nothing either.)
  */
 export function OnboardingWizard({
   pool,
   todayKey,
   disciplines,
   initial,
-  onDone
+  onDone,
+  onDiagnostic
 }: {
   pool: PlanPoolDto
   todayKey: string
   disciplines: DisciplineRef[]
   initial: PlanSettingsDto
   onDone: () => void
+  /** Navigate to the auto-started diagnostic session (settings are already saved by then). */
+  onDiagnostic: () => void
 }): React.JSX.Element {
   const [step, setStep] = useState(0)
   const [examDate, setExamDate] = useState<string | null>(initial.examDate)
@@ -34,6 +40,9 @@ export function OnboardingWizard({
   const [budget, setBudget] = useState(initial.dailyBudgetMinutes)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Everything saved; showing the optional diagnostic offer. The parent is NOT told to refetch
+  // yet (that would swap this wizard out for the dashboard from under the offer screen).
+  const [finished, setFinished] = useState(false)
 
   const outcome = pacingOutcome({
     pool, todayKey, examDate, finishBufferDays: initial.finishBufferDays,
@@ -81,7 +90,7 @@ export function OnboardingWizard({
         // console note; comfort is editable any time in Plan settings.
         if (!prefRes.ok) console.error('savePrefs failed during onboarding', prefRes.error)
       }
-      onDone()
+      setFinished(true)
     } catch (e) {
       console.error('onboarding save threw', e)
       setSaveError('Could not save your plan settings just now. Please try again.')
@@ -91,6 +100,40 @@ export function OnboardingWizard({
   }
 
   const steps = ['Exam date', 'Flashcards', 'Comfort', 'Budget']
+
+  if (finished) {
+    return (
+      <div className="mx-auto max-w-2xl p-8">
+        <div className="rounded-2xl bg-white p-8 text-center ring-1 ring-gray-100">
+          <h2 className="text-3xl font-bold text-gray-800">Your plan is ready 🎉</h2>
+          <p className="mx-auto mt-3 max-w-md text-gray-600">
+            Want to calibrate it first? A quick diagnostic — about {DIAGNOSTIC_CONFIG.targetTotal}{' '}
+            questions across every discipline — gives the plan real evidence to start from instead
+            of guesses.
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onDiagnostic}
+              className="rounded-lg bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-700"
+            >
+              Start diagnostic
+            </button>
+            <button
+              type="button"
+              onClick={onDone}
+              className="rounded-lg bg-gray-100 px-5 py-2.5 font-semibold text-gray-600 hover:bg-gray-200"
+            >
+              Skip for now
+            </button>
+          </div>
+          <p className="mt-4 text-xs text-gray-400">
+            Totally optional — the plan self-corrects as you practice either way.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-2xl p-8">

@@ -19,6 +19,7 @@ export const CH = {
   taxonomyList: 'taxonomy:list',
   taxonomyTags: 'taxonomy:tags',
   qbankStartSession: 'qbank:startSession',
+  qbankStartDiagnostic: 'qbank:startDiagnostic',
   qbankSubmitAnswer: 'qbank:submitAnswer',
   qbankCompleteSession: 'qbank:completeSession',
   qbankToggleFlag: 'qbank:toggleFlag',

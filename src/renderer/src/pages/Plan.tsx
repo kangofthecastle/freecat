@@ -3,6 +3,7 @@ import type { PageProps } from '../App'
 import type { ActivityResult, PlanTaskDto, PlanTaskStatus, PlanView } from '../../../shared/dto'
 import { REWARDS_CONFIG } from '../../../shared/gamification/config'
 import { dayNumberOfKey } from '../../../shared/gamification/dates'
+import { DIAGNOSTIC_CONFIG } from '../../../shared/qbank/diagnostic'
 import { errorMessage } from '../gamification/labels'
 import { OnboardingWizard } from '../plan/OnboardingWizard'
 import { PlanSettings } from '../plan/PlanSettings'
@@ -20,6 +21,7 @@ export default function Plan(props: PageProps): React.JSX.Element {
   const [selectedDay, setSelectedDay] = useState<string | null>(null) // null = today
   const [celebration, setCelebration] = useState<ActivityResult | null>(null)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const [diagDismissed, setDiagDismissed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   // Overlapping loads (rapid Done/Skip clicks each refetch) may resolve out of order over IPC;
@@ -129,6 +131,7 @@ export default function Plan(props: PageProps): React.JSX.Element {
         disciplines={disciplines}
         initial={view.settings}
         onDone={() => void load()}
+        onDiagnostic={() => navigate?.('qbank', { qbankDiagnostic: { start: true } })}
       />
     )
   }
@@ -177,6 +180,36 @@ export default function Plan(props: PageProps): React.JSX.Element {
       ) : (
         <>
           <ProgressStrip progress={view.progress} />
+
+          {/* Cold-start calibration card: no persistence needed — it exists exactly while there
+              are zero attempts (any answered question, diagnostic or not, retires it for good). */}
+          {view.questions.attemptedDistinct === 0 && !diagDismissed && (
+            <div className="flex items-start justify-between gap-3 rounded-xl bg-violet-50 p-4 ring-1 ring-violet-100">
+              <div>
+                <p className="text-sm font-semibold text-violet-900">Calibrate your plan</p>
+                <p className="mt-1 text-sm text-violet-800">
+                  No questions answered yet, so the plan is running on your comfort ratings alone. A
+                  quick diagnostic (about {DIAGNOSTIC_CONFIG.targetTotal} questions across every
+                  discipline) gives it real evidence.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate?.('qbank', { qbankDiagnostic: { start: true } })}
+                  className="mt-3 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+                >
+                  Start diagnostic
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDiagDismissed(true)}
+                className="text-violet-400 hover:text-violet-600"
+                aria-label="Dismiss diagnostic offer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {actionError && (
             <p role="alert" className="flex items-center justify-between rounded-xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-100">

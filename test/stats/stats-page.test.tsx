@@ -18,7 +18,9 @@ function emptyOverview(): StatsOverview {
       { section: 'bio-biochem', title: 'Bio & Biochem Foundations', mastery: zeroMastery, disciplines: [] },
       { section: 'psych-soc', title: 'Psych, Soc & Bio Foundations', mastery: zeroMastery, disciplines: [] }
     ],
+    masteryTrend: [],
     fingerprints: [],
+    fingerprintWindow: { days: 60, widened: false },
     pacing: [
       { section: 'chem-phys', title: 'Chem & Phys Foundations', medianMs: null, timedCount: 0, outlierCount: 0, referenceMs: 96_600 },
       { section: 'bio-biochem', title: 'Bio & Biochem Foundations', medianMs: null, timedCount: 0, outlierCount: 0, referenceMs: 96_600 },
@@ -44,11 +46,31 @@ describe('Stats page', () => {
   it('renders the zero-data profile as a welcome, not an error', async () => {
     stub(emptyOverview())
     render(<Stats />)
-    await waitFor(() => expect(screen.getByText(/Mastery/)).toBeTruthy())
+    // /Mastery/ matches both the mastery panel and the new trend panel — assert on the ambient set.
+    await waitFor(() => expect(screen.getAllByText(/Mastery/).length).toBeGreaterThan(0))
     expect(screen.getByText(/Nothing here yet/)).toBeTruthy()
     expect(screen.getByText(/No recent misses/)).toBeTruthy()
     expect(screen.getByText(/No cards in rotation yet/)).toBeTruthy()
     expect(screen.getByText(/No study events yet/)).toBeTruthy()
+    expect(screen.getByText(/The trend starts once a section has enough evidence/)).toBeTruthy()
+  })
+
+  it('mastery trend renders lines for scored days and labels a widened fingerprint window', async () => {
+    const o = emptyOverview()
+    o.masteryTrend = [
+      { day: '2026-07-15', sections: { 'chem-phys': null, 'bio-biochem': null, 'psych-soc': null } },
+      { day: '2026-07-16', sections: { 'chem-phys': 0.62, 'bio-biochem': null, 'psych-soc': null } },
+      { day: '2026-07-17', sections: { 'chem-phys': 0.7, 'bio-biochem': null, 'psych-soc': null } }
+    ]
+    o.fingerprintWindow = { days: 132, widened: true }
+    stub(o)
+    render(<Stats />)
+    await waitFor(() => expect(screen.getByLabelText('Mastery over time per section')).toBeTruthy())
+    // legend shows the latest scored value for the scored section, honesty badge for the others
+    expect(screen.getByText('70%')).toBeTruthy()
+    expect(screen.getAllByText('· needs data').length).toBe(2)
+    // the widened window is labeled with its REAL span, not the configured 60
+    expect(screen.getByText(/last 132 days — stretched back/)).toBeTruthy()
   })
 
   it('needsData topics render a badge instead of a confident bar; scored topics show a percent', async () => {
