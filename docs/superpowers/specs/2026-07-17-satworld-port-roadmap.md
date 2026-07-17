@@ -1,6 +1,6 @@
 # SAT World port roadmap — Stats + Plan for FreeCAT
 
-> **Status: draft for user review.** Umbrella roadmap, not a build spec — each phase below gets its own design spec + implementation plan before any code (house pattern). Read `docs/freecat-charter.md` first. This is the mirror image of sat-world's `docs/superpowers/specs/2026-06-26-freecat-port-roadmap.md`: that doc ported FreeCAT's Content Review + Questions machinery *into* sat-world; this one ports sat-world's two most built-out subsystems — the **analytics layer** and the **plan-tracks planner** (sat-world PR #30 design + PR #35 implementation, live on sat-world `main` as of 2026-07-16) — *back into* FreeCAT, adapted for a single-user, local-first, no-server Electron app. We port the machinery (pure computation, data shapes, UX concepts), not the classroom: no teachers, no tenants, no mocks, no cron.
+> **Status: reviewed — decisions locked 2026-07-17.** The open questions below were resolved under one guiding principle the user set: FreeCAT is a *personal* study app — one real student, local, minimal ceremony, honest numbers, and the pet economy is part of its soul. Umbrella roadmap, not a build spec — each phase below gets its own design spec + implementation plan before any code (house pattern). Read `docs/freecat-charter.md` first. This is the mirror image of sat-world's `docs/superpowers/specs/2026-06-26-freecat-port-roadmap.md`: that doc ported FreeCAT's Content Review + Questions machinery *into* sat-world; this one ports sat-world's two most built-out subsystems — the **analytics layer** and the **plan-tracks planner** (sat-world PR #30 design + PR #35 implementation, live on sat-world `main` as of 2026-07-16) — *back into* FreeCAT, adapted for a single-user, local-first, no-server Electron app. We port the machinery (pure computation, data shapes, UX concepts), not the classroom: no teachers, no tenants, no mocks, no cron.
 
 ## Goal
 
@@ -54,7 +54,7 @@ sat-world enforces a strict pure/service split — every file under `src/lib/ana
 
 ### Phase 1 — Stats (Module 4): the analytics port
 
-Read-only module; **no migration**. Port the pure engines (`mastery`, `fingerprints`, `effort`, `calendar-grid`, config) into `src/main/stats/`; write the one new repository that assembles their inputs from `qbank_attempt` / `review_log` / `card_scheduling` / `lesson_progress` / `daily_activity` + content index; `src/main/ipc/stats.ts`; `Stats.tsx` page (mastery by discipline→topic with needs-data/stale flags, coverage, error fingerprints, time-per-question pacing, activity heatmap, effort trend, flashcard workload from FSRS state). The existing qbank `Dashboard.tsx` / `qbank-analytics.ts` accuracy view is absorbed into Stats (qbank keeps a link; one analytics surface, not two). Deliverable: a Stats page that would have been honest about every number even if Plan never ships.
+Read-only module; **no migration**. Port the pure engines (`mastery`, `fingerprints`, `effort`, `calendar-grid`, config) into `src/main/stats/`; write the one new repository that assembles their inputs from `qbank_attempt` / `review_log` / `card_scheduling` / `lesson_progress` / `daily_activity` + content index; `src/main/ipc/stats.ts`; `Stats.tsx` page (mastery rolled up **section→discipline→topic** with needs-data/stale flags, coverage, error fingerprints, time-per-question pacing — self-relative math with AAMC per-section seconds-per-question shown as labeled reference lines, never judgment thresholds — activity heatmap, effort trend, flashcard workload from FSRS state). The existing qbank `Dashboard.tsx` / `qbank-analytics.ts` accuracy view is absorbed into Stats (qbank keeps a link; one analytics surface, not two). Deliverable: a Stats page that would have been honest about every number even if Plan never ships.
 
 ### Phase 2 — Plan engine (Module 5, M1): schema + pure planner + regeneration
 
@@ -62,22 +62,24 @@ Migration `0007` (additive): `plan_settings` singleton (nullable `examDate`, `da
 
 ### Phase 3 — Plan UI (Module 5, M2): onboarding + daily surface
 
-Onboarding wizard (exam date → triangle pick-one-derive-other with live validation → discipline comfort ratings → budget), Today view (task list with start/complete/skip, deep-links into Qbank/Flashcards/Content via existing `navigate(key, payload)`), week strip, plan streak + on-track status **with skip-rate shown beside it** (A5), behind-pace nudge (personal, dismissible — the ported `questionsBehindPace` math minus the teacher warning surface), settings panel (re-triangle on change), lesson auto-offers surfacing. Watch for the onboarding-unmount-on-save regression sat-world's end-to-end reviewer caught in PR #35 — same wizard shape, same risk.
+Onboarding wizard (exam date → triangle pick-one-derive-other with live validation → discipline comfort ratings → budget), Today view (task list with start/complete/skip, deep-links into Qbank/Flashcards/Content via existing `navigate(key, payload)`), week strip, plan streak + on-track status **with skip-rate shown beside it** (A5), behind-pace nudge (personal, dismissible — the ported `questionsBehindPace` math minus the teacher warning surface), settings panel (re-triangle on change; comfort ratings editable here anytime), lesson auto-offers surfacing. Gamification hookup: one `recordActivity({ kind: 'plan.day' })` on first full completion of a day's non-optional tasks — standard pipeline (own transaction, try/catch, never blocks), no direct writes to gamification tables, at most one per dayKey by construction, coin value tuned small in the gamification config. Watch for the onboarding-unmount-on-save regression sat-world's end-to-end reviewer caught in PR #35 — same wizard shape, same risk.
 
 ### Phase 4 — Dynamic refinement (Module 5, M3)
 
-Diagnostic mode: `qbank_session.mode` gains `'diagnostic'` (Zod/text only — no migration), 1–2 mid-difficulty questions per discipline (~15 total) whose attempts count as ordinary mastery evidence, offered from onboarding for cold-start priors. Mastery-over-time trend view in Stats (as-of-day recomputation; add the lazy cache here *only* if profiling says so). Recency-window tuning for fingerprints against real usage. Comfort re-rating surface (sat-world deferred "does comfort decay?" — we answer it here with data).
+Diagnostic mode: `qbank_session.mode` gains `'diagnostic'` (Zod/text only — no migration), 1–2 mid-difficulty questions per discipline (target ~15 total, **degrading gracefully when the bank is thin** — compose from whatever exists, never block on missing content) whose attempts count as ordinary mastery evidence, offered from onboarding for cold-start priors. Mastery-over-time trend view in Stats (as-of-day recomputation; add the lazy cache here *only* if profiling says so). Recency-window tuning for fingerprints against real usage. No comfort decay/re-ask machinery: the priors wash out mathematically as evidence accumulates (`nEff` shrinkage), so staleness self-corrects — comfort just stays editable in Plan settings (Phase 3), and a personal app shouldn't nag.
 
 Charter updates ride each phase's PR: new module briefs + ASCII-map boxes for Stats/Plan, §5.2 ownership lines as stated above.
 
-## Open questions by phase
+## Resolved questions (2026-07-17)
 
-- **(1)** Should section-level (Chem/Phys, CARS, Bio/Biochem, Psych/Soc) rollups appear in Stats v1, or discipline→topic only? `qbank_attempt.section` is already denormalized, so it's cheap either way.
-- **(1)** MCAT pacing benchmarks for `insights.ts` copy: AAMC per-section seconds-per-question, or self-relative only (vs. own median) until content volume justifies absolute benchmarks?
-- **(2)** Blueprint weights: sat-world's `examWeightsWithinSubject` encodes the SAT blueprint. Port equivalent from AAMC section/discipline weightings (content tags carry AAMC codes via `CONTENT_TAG_VOCAB`), or ship v1 with uniform weights and let coverage/mastery drive priority alone?
-- **(2)** Questions-track budget unit: minutes (sat-world) vs. question-count (qbank sessions are count-based)? Leaning count with a minutes estimate for the budget split.
-- **(3)** Does completing every task in a day earn a gamification bonus (new `recordActivity` kind, e.g. `'plan.day'`), or is the pet economy already saturated by the underlying activities? (Charter says gamification hooks are cheap; double-award is the thing to avoid.)
-- **(4)** Comfort decay/re-ask cadence — sat-world punted; propose: prompt re-rate per discipline after 30 local days of no rating change *and* mastery divergence from the prior.
+All resolved by the guiding principle in the status line — design for one real MCAT student, not a product committee:
+
+- **(1) Section rollups: yes, in v1.** An MCAT student thinks C/P → CARS → B/B → P/S first; "am I ready for P/S?" is the top-of-mind question, and `qbank_attempt.section` is already denormalized. Stats presents section→discipline→topic.
+- **(1) Pacing benchmarks: self-relative math, AAMC reference lines.** Fingerprint/outlier detection stays vs-own-median (honest at any n, on uncalibrated seed content); the published AAMC per-section seconds-per-question render as labeled reference lines only. Absolute judgment thresholds on uncalibrated items would manufacture false confidence.
+- **(2) Blueprint weights: AAMC discipline-level constants in `PLAN_CONFIG`, uniform within a discipline.** MCAT is a high-yield-driven exam and the AAMC weightings are published, stable constants — one editable table in config. Per-topic weighting waits until content volume makes it meaningful.
+- **(2) Questions track plans in counts.** "Do 15 questions" is actionable; qbank sessions are count-based; minutes exist only inside `allocateTrackBudget`'s split math via per-item estimates.
+- **(3) Daily plan bonus: yes** — the single `'plan.day'` activity described in Phase 3. The pet economy is part of FreeCAT's soul; one small per-day bump through the standard pipeline is joy without inflation.
+- **(4) No comfort re-ask machinery** — rationale in Phase 4. Priors self-correct through evidence; editability replaces nagging.
 
 ## Out of scope (this roadmap)
 
