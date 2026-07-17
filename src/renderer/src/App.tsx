@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import type { StartSessionInput } from '../../shared/dto'
 import Home from './pages/Home'
+import Plan from './pages/Plan'
 import Nest from './pages/Nest'
 import Qbank from './pages/Qbank'
 import ContentReview from './pages/ContentReview'
@@ -8,6 +10,7 @@ import Stats from './pages/Stats'
 
 const ROUTES = {
   home: { label: 'Home', component: Home },
+  plan: { label: 'Plan', component: Plan },
   nest: { label: 'Nest', component: Nest },
   qbank: { label: 'Qbank', component: Qbank },
   content: { label: 'Content Review', component: ContentReview },
@@ -21,6 +24,9 @@ export type RouteKey = keyof typeof ROUTES
 export interface NavPayload {
   lessonSlug?: string // inbound: Content Review opens this lesson
   topicSlug?: string // outbound: Qbank opens filtered to this topic (today lessonSlug === topicSlug)
+  /** Inbound to Qbank from a Plan task: auto-start exactly this session (sized topic practice or
+   *  spaced mistake review). Each navigation builds a fresh object — Qbank dedups on identity. */
+  qbankSession?: StartSessionInput
 }
 
 /** Pages may opt into navigation by accepting these props. */

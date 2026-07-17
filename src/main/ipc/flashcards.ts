@@ -6,7 +6,7 @@ import { ok, err } from '../../shared/dto'
 import type { CardView, ServiceResult } from '../../shared/dto'
 import { importViaDialog } from '../flashcards/import'
 import { listDeckSets, listDecks, listCards, deleteDeckSet, getCard } from '../repositories/flashcards'
-import { reviewCounts, nextReviewCard, gradeReview } from '../repositories/review'
+import { reviewCounts, nextReviewCard, gradeReview, type NewCardOrder } from '../repositories/review'
 import { flashcardsMediaDir } from '../flashcards/paths'
 import { mintMediaToken } from '../flashcards/media-tokens'
 import { toCardView } from '../flashcards/card-view'
@@ -30,6 +30,9 @@ export interface FlashcardsIpcOptions {
   /** Fired after a successfully applied study write — main/index.ts wires the plan's debounced
    *  regeneration here (modules stay decoupled: this file knows a callback, not the Plan module). */
   onActivity?: () => void
+  /** How to pick the next NEW card — main/index.ts wires the Plan module's `newCardOrder` setting
+   *  here (same decoupling: a getter, not a plan-table read). Absent/throwing ⇒ 'deck'. */
+  newCardOrder?: () => Promise<NewCardOrder>
 }
 
 /** getCard → mintMediaToken → toCardView, as one unit. Both browse (`fcGetCard`) and study
@@ -57,7 +60,9 @@ export function registerFlashcardsIpc(db: DB, opts: FlashcardsIpcOptions = {}): 
   })
   ipcMain.handle(CH.fcNextReviewCard, async (_e, raw: unknown) => {
     const deckId = reviewDeckIdSchema.parse(raw)
-    const next = await nextReviewCard(db, deckId, now())
+    // A broken settings read must never break the review queue — degrade to deck order.
+    const order = await (opts.newCardOrder?.() ?? Promise.resolve<NewCardOrder>('deck')).catch(() => 'deck' as const)
+    const next = await nextReviewCard(db, deckId, now(), order)
     if (next === null) return err('deck-not-found')
     if (next.done) return ok(next)
     // Same builder as fcGetCard, so media tokens / CSP behavior are identical to browse.

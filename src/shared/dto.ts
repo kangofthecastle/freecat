@@ -138,6 +138,17 @@ export interface SubmitAnswerResult extends AnswerResult {
 export interface SessionSummaryRow { questionId: string; chosen: ChoiceLetter; isCorrect: boolean }
 export interface SessionSummary { sessionId: number; total: number; correct: number; rows: SessionSummaryRow[] }
 
+/** Composer availability snapshot row — the facts `planSession`'s eligibility filter runs on
+ *  (never the answer key). Tags are pre-joined `vocab:code` keys to match the composer's set. */
+export interface AvailabilityQuestionDto {
+  id: string
+  topic: string
+  discipline: string
+  tags: string[]
+  incorrect: boolean // latest attempt was incorrect (the refine:'incorrect' set)
+  flagged: boolean
+}
+
 // ── Stats (Module 4) DTOs — read-only overview computed live from raw tables, no caches ──
 /** Accuracy per AAMC content category (JS tally over the content index; a multi-tagged question
  *  counts once per tag — intentional double-count, captioned in the UI). */
@@ -233,7 +244,7 @@ export interface StatsOverview {
   flashcards: FlashcardLoadDto
 }
 
-// ── Plan (Module 5) DTOs — engine + debug surface (Phase 2); the full UI arrives in Phase 3 ──
+// ── Plan (Module 5) DTOs ──
 export type PlanTaskKind = 'flashcards' | 'questions' | 'lesson'
 export type PlanTaskStatus = 'pending' | 'started' | 'completed' | 'skipped' | 'expired'
 
@@ -311,18 +322,35 @@ export interface PlanProgressDto {
   skipRate: number | null // A5: displayed beside the streak so skips can't read as perfection
 }
 
+/** Triangle raw material, present even before an exam date exists — the onboarding wizard runs the
+ *  shared `flashcardTriangle` live against these while the user is still picking a date. */
+export interface PlanPoolDto {
+  deckSize: number // reviewable cards across all imported decks
+  introducedSoFar: number
+  rampDays: number
+  dailyNewCeiling: number
+}
+
 export interface PlanView {
   settings: PlanSettingsDto
-  days: { day: string; tasks: PlanTaskDto[] }[] // today + 6
+  days: { day: string; tasks: PlanTaskDto[] }[] // today + 6; days[0].day is the app-tz todayKey
   prefs: PlanPrefDto[]
   progress: PlanProgressDto
   triangle: PlanTriangleDto | null // null in habit mode (no exam date)
+  pool: PlanPoolDto
+  questions: { publishedTotal: number; attemptedDistinct: number } // bank-coverage facts for pace UI
   behindPace: boolean
 }
 
 export interface SetPlanTaskStatusInput {
   taskId: number
   status: 'pending' | 'started' | 'completed' | 'skipped' // 'expired' is system-only
+}
+export interface SetPlanTaskStatusResult {
+  task: PlanTaskDto
+  /** Non-null exactly when this status change completed the day's required tasks for the first
+   *  time and the `plan.day` bonus was credited — the UI's cue to celebrate. */
+  activity: ActivityResult | null
 }
 
 // --- Flashcards DTOs ---

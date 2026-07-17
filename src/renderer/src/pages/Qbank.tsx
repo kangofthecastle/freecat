@@ -24,6 +24,10 @@ export default function Qbank(props: PageProps): React.JSX.Element {
   // SECOND in-place deep-link to a DIFFERENT topic re-fires, while StrictMode's double-effect and
   // payload-identity churn for the SAME slug stay deduped.
   const lastStartedSlugRef = useRef<string | null>(null)
+  // The plan-task session we last auto-started, deduped by OBJECT IDENTITY: every navigate() from
+  // the Plan page builds a fresh input object (so re-clicking the same task re-fires), while
+  // StrictMode's immediate second effect run sees the same object and skips.
+  const lastPlanSessionRef = useRef<StartSessionInput | null>(null)
 
   const start = useCallback(async (input: StartSessionInput): Promise<void> => {
     if (startingRef.current) return
@@ -56,6 +60,15 @@ export default function Qbank(props: PageProps): React.JSX.Element {
     if (!topicSlug || lastStartedSlugRef.current === topicSlug) return
     lastStartedSlugRef.current = topicSlug
     void start({ scopeKind: 'topic', scopeCode: topicSlug, refine: 'all', count: DEEPLINK_COUNT })
+  }, [navPayload, start])
+
+  // Inbound from a Plan task: the payload carries the exact session to run (topic + count sized by
+  // the planner, or refine:'incorrect' for spaced mistake review) — start it verbatim.
+  useEffect(() => {
+    const input = navPayload?.qbankSession
+    if (!input || lastPlanSessionRef.current === input) return
+    lastPlanSessionRef.current = input
+    void start(input)
   }, [navPayload, start])
 
   const complete = useCallback((rec: SessionRecord): void => {

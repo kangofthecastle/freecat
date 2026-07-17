@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Refine, StartSessionInput, Tag, TagVocabEntry } from '../../../shared/dto'
+import type { AvailabilityQuestionDto, Refine, StartSessionInput, Tag, TagVocabEntry } from '../../../shared/dto'
 import { buildScopeTree, parseScopeValue, scopeValue, type Scope, type ScopeTree } from './scope-tree'
+import { availableCount, emptyHint, refineCounts, scopeCounts } from './availability'
 
 /** A pre-selected scope, e.g. when the dashboard taps through into a topic. */
 export type InitialScope = Scope
@@ -23,6 +24,10 @@ export function Composer({
 }): React.JSX.Element {
   const [tree, setTree] = useState<ScopeTree | null>(null)
   const [tags, setTags] = useState<TagVocabEntry[]>([])
+  // Availability snapshot for live counts. `null` = not loaded (failed or pending): the composer
+  // still works, it just shows no counts and never disables anything — counts are a courtesy,
+  // not a gate the user can get stuck behind.
+  const [availability, setAvailability] = useState<AvailabilityQuestionDto[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [starting, setStarting] = useState(false)
 
@@ -45,6 +50,13 @@ export function Composer({
         console.error('Failed to load composer data', e)
         if (alive) setLoadFailed(true)
       })
+    // Counts arrive separately and degrade separately — a failure here never blocks composing.
+    window.freecat.qbank
+      .availability()
+      .then((rows) => {
+        if (alive) setAvailability(rows)
+      })
+      .catch((e) => console.error('Failed to load availability counts', e))
     return () => {
       alive = false
     }
@@ -69,8 +81,33 @@ export function Composer({
     [tags, selectedTagKeys]
   )
 
+  const currentScope = useMemo<Scope>(() => parseScopeValue(scope), [scope])
+  const perScope = useMemo(
+    () => (availability ? scopeCounts(availability, refine, selectedTagKeys) : null),
+    [availability, refine, selectedTagKeys]
+  )
+  const perRefine = useMemo(
+    () => (availability ? refineCounts(availability, currentScope, selectedTagKeys) : null),
+    [availability, currentScope, selectedTagKeys]
+  )
+  const available = useMemo(
+    () => (availability ? availableCount(availability, currentScope, refine, selectedTagKeys) : null),
+    [availability, currentScope, refine, selectedTagKeys]
+  )
+
+  const scopeCount = (s: Scope): number | null => {
+    if (!perScope) return null
+    if (s.scopeKind === 'mixed') return perScope.total
+    if (s.scopeKind === 'discipline') return perScope.byDiscipline.get(s.scopeCode ?? '') ?? 0
+    return perScope.byTopic.get(s.scopeCode ?? '') ?? 0
+  }
+
+  // What Start will actually deliver (passage atomicity can add ride-along siblings on top).
+  const willStart = available === null ? count : Math.min(count, available)
+  const startBlocked = available === 0
+
   const start = async (): Promise<void> => {
-    if (starting) return
+    if (starting || startBlocked) return
     const parsed: Scope = parseScopeValue(scope)
     setStarting(true)
     try {
@@ -108,6 +145,7 @@ export function Composer({
             current={scope}
             onChange={setScope}
             label="Mixed — all disciplines"
+            count={scopeCount({ scopeKind: 'mixed' })}
             strong
           />
           {tree?.disciplines.map((d) => (
@@ -118,6 +156,7 @@ export function Composer({
                 current={scope}
                 onChange={setScope}
                 label={d.title}
+                count={scopeCount({ scopeKind: 'discipline', scopeCode: d.discipline })}
                 strong
               />
               {d.topics.length > 0 && (
@@ -130,6 +169,7 @@ export function Composer({
                       current={scope}
                       onChange={setScope}
                       label={t.title}
+                      count={scopeCount({ scopeKind: 'topic', scopeCode: t.slug })}
                     />
                   ))}
                 </div>
@@ -184,21 +224,29 @@ export function Composer({
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
         <h3 className="mb-3 text-lg font-semibold text-gray-700">Refine</h3>
         <div className="flex flex-wrap gap-2">
-          {REFINE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setRefine(opt.value)}
-              aria-pressed={refine === opt.value}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                refine === opt.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-100'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {REFINE_OPTIONS.map((opt) => {
+            const n = perRefine?.[opt.value] ?? null
+            // Never disable the currently-selected option — the user must always be able to see
+            // (and leave) the state they are in.
+            const disabled = n === 0 && refine !== opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRefine(opt.value)}
+                aria-pressed={refine === opt.value}
+                disabled={disabled}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  refine === opt.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40'
+                }`}
+              >
+                {opt.label}
+                {n !== null && <span className={refine === opt.value ? 'ml-1.5 text-blue-200' : 'ml-1.5 text-gray-400'}>{n}</span>}
+              </button>
+            )
+          })}
         </div>
       </section>
 
@@ -221,16 +269,32 @@ export function Composer({
             </button>
           ))}
         </div>
+        {available !== null && available > 0 && available < count && (
+          <p className="mt-3 text-sm text-gray-500">
+            Only {available} question{available === 1 ? '' : 's'} match — the session will be {available} long.
+          </p>
+        )}
       </section>
 
       <button
         type="button"
         onClick={() => void start()}
-        disabled={!tree || starting}
+        disabled={!tree || starting || startBlocked}
         className="w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
       >
-        {starting ? 'Starting…' : 'Start session'}
+        {starting
+          ? 'Starting…'
+          : startBlocked
+            ? 'Nothing matches'
+            : available === null
+              ? 'Start session'
+              : `Start ${willStart} question${willStart === 1 ? '' : 's'}`}
       </button>
+      {startBlocked && (
+        <p role="status" className="text-center text-sm text-gray-500">
+          {emptyHint(refine, selectedTagKeys.size > 0)}
+        </p>
+      )}
     </div>
   )
 }
@@ -241,6 +305,7 @@ function ScopeRadio({
   current,
   onChange,
   label,
+  count,
   strong = false
 }: {
   name: string
@@ -248,10 +313,13 @@ function ScopeRadio({
   current: string
   onChange: (value: string) => void
   label: string
+  /** Matches under the current refine + tags; null = counts unavailable (render nothing). */
+  count: number | null
   strong?: boolean
 }): React.JSX.Element {
+  const empty = count === 0
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+    <label className={`flex cursor-pointer items-center gap-2 text-sm text-gray-700 ${empty ? 'opacity-50' : ''}`}>
       <input
         type="radio"
         name={name}
@@ -261,6 +329,7 @@ function ScopeRadio({
         className="h-4 w-4 accent-blue-600"
       />
       <span className={strong ? 'font-semibold text-gray-800' : ''}>{label}</span>
+      {count !== null && <span className="text-xs text-gray-400">{count}</span>}
     </label>
   )
 }

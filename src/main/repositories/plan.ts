@@ -1,14 +1,14 @@
 import { and, eq, gte, lt, lte, inArray, sql, count } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import {
-  planSettings, planTask, planTaxonomyPref, planLessonOffer,
+  planSettings, planTask, planTaxonomyPref, planLessonOffer, planDayAward,
   cardScheduling, cards, lessonProgress, qbankAttempt,
   type PlanSettingsRow, type PlanTaskRow
 } from '../db/schema'
 import type {
   PlanSettingsDto, SavePlanSettingsInput, SavePlanSettingsResult, PacingOutcomeDto,
   PlanPrefDto, PlanTaskDto, PlanTriangleDto, PlanView, SetPlanTaskStatusInput,
-  ServiceResult, DisciplineKey
+  SetPlanTaskStatusResult, ActivityResult, ServiceResult, DisciplineKey
 } from '../../shared/dto'
 import { ok, err } from '../../shared/dto'
 import type { ContentIndex } from '../content/types'
@@ -31,7 +31,8 @@ import {
 import { loadAttempts, latestPerQuestion, type AttemptRow } from './attempt-evidence'
 import { listFlaggedIds } from './qbank-flags'
 import { NEW_PER_DAY, REVIEWABLE } from './review'
-import { appTz } from './activity'
+import { appTz, creditActivitySafely, type RecordActivityFn } from './activity'
+import { REWARDS_CONFIG } from '../../shared/gamification/config'
 
 const TOPIC_TITLE: ReadonlyMap<string, string> = new Map(TOPICS.map((t) => [t.slug, t.title]))
 const DISCIPLINE_TITLE: ReadonlyMap<string, string> = new Map(DISCIPLINES.map((d) => [d.slug, d.title]))
@@ -219,13 +220,39 @@ export async function savePlanPrefs(db: DB, prefs: PlanPrefDto[], now = new Date
 export async function setPlanTaskStatus(
   db: DB,
   input: SetPlanTaskStatusInput,
-  now = new Date()
-): Promise<ServiceResult<PlanTaskDto>> {
+  now = new Date(),
+  opts: { recordActivityFn?: RecordActivityFn } = {}
+): Promise<ServiceResult<SetPlanTaskStatusResult>> {
   const [row] = await db.select().from(planTask).where(eq(planTask.id, input.taskId))
   if (!row) return err('not-found')
   if (row.status === 'expired') return err('invalid') // system-resolved; the day is gone
   await db.update(planTask).set({ status: input.status, updatedAt: now }).where(eq(planTask.id, input.taskId))
-  return ok(toTaskDto({ ...row, status: input.status }))
+
+  // Only a completion can newly finish a day, so only completions bother checking for the bonus.
+  const activity = input.status === 'completed' ? await maybeAwardPlanDay(db, row.day, now, opts.recordActivityFn) : null
+  return ok({ task: toTaskDto({ ...row, status: input.status }), activity })
+}
+
+/**
+ * The `plan.day` bonus: fires when a status change leaves `day` fully complete (`dayOutcome`
+ * semantics — every required task completed, skips excluded, optional lessons never counted) AND no
+ * award row exists for that dayKey yet. The durable marker is what makes it at-most-once —
+ * un-complete/re-complete cycles and regeneration rebuilds cannot re-trigger it (same reasoning as
+ * `plan_lesson_offer`). Credit rides the standard gamification pipeline via `creditActivitySafely`:
+ * its own transaction, swallowed on failure, never blocking the status change itself.
+ */
+async function maybeAwardPlanDay(
+  db: DB,
+  day: string,
+  now: Date,
+  recordActivityFn?: RecordActivityFn
+): Promise<ActivityResult | null> {
+  const dayRows = await db.select({ status: planTask.status, optional: planTask.optional }).from(planTask).where(eq(planTask.day, day))
+  if (dayOutcome(dayRows) !== 'complete') return null
+  const [already] = await db.select({ id: planDayAward.id }).from(planDayAward).where(eq(planDayAward.day, day))
+  if (already) return null
+  await db.insert(planDayAward).values({ day, awardedAt: now }).onConflictDoNothing()
+  return creditActivitySafely(db, { kind: 'plan.day', count: REWARDS_CONFIG.planDayBonus, now }, recordActivityFn)
 }
 
 const taskTitle = (row: Pick<PlanTaskRow, 'kind' | 'taxonomyRef' | 'refine'>): string => {
@@ -521,7 +548,7 @@ export async function regeneratePlan(db: DB, ctx: PlanContext): Promise<void> {
   })
 }
 
-// ── The assembled view (debug surface now; Phase 3's data channel later) ──
+// ── The assembled view (the Plan page's data channel) ──
 
 export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
   const now = ctx.now ?? new Date()
@@ -593,6 +620,14 @@ export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
       skipRate: planSkipRate(windowStatuses)
     },
     triangle,
+    // Raw triangle material, exam date or not — the wizard runs the shared triangle live off these.
+    pool: {
+      deckSize: pool.deckSize,
+      introducedSoFar: pool.introducedSoFar,
+      rampDays: computeRampDays(),
+      dailyNewCeiling: NEW_PER_DAY
+    },
+    questions: { publishedTotal: ctx.index.allQuestionIds.length, attemptedDistinct: facts.attemptedDistinct },
     behindPace
   }
 }

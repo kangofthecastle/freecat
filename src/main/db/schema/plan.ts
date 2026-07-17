@@ -1,7 +1,8 @@
 import { sqliteTable, integer, text, index, uniqueIndex, check } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
-// Plan-owned (Module 5, roadmap Phase 2). Additive migration 0007 — no other module's tables change.
+// Plan-owned (Module 5). Additive migrations 0007 (Phase 2 engine) + 0008 (Phase 3's plan_day_award)
+// — no other module's tables change.
 
 /** Singleton (id = 1). All pacing knobs are USER-owned (no teacher track here, ever).
  *  `examDate` is a local dayKey; null = habit mode (plan still materializes from budget + FSRS dues
@@ -18,7 +19,7 @@ export const planSettings = sqliteTable('plan_settings', {
   // Questions track (self-paced): start day + finish buffer, defaults = start now / finish by exam.
   questionsStartDay: text('questions_start_day'),
   questionsFinishBufferDays: integer('questions_finish_buffer_days').notNull().default(0),
-  newCardOrder: text('new_card_order').notNull().default('deck'), // 'deck' | 'shuffled' — wired to the reviewer in Phase 3
+  newCardOrder: text('new_card_order').notNull().default('deck'), // 'deck' | 'shuffled' — consumed by the reviewer's new-card pick
   onboardedAt: integer('onboarded_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date())
 }, (t) => [
@@ -77,6 +78,16 @@ export const planLessonOffer = sqliteTable('plan_lesson_offer', {
   lessonSlug: text('lesson_slug').notNull(),
   offeredAt: integer('offered_at', { mode: 'timestamp' }).notNull()
 }, (t) => [uniqueIndex('plan_lesson_offer_slug_idx').on(t.lessonSlug)])
+
+/** Durable "this plan day's bonus was already credited" marker (migration 0008). The `plan.day`
+ *  gamification bonus fires on the FIRST full completion of a day's required tasks; un-completing
+ *  and re-completing must not re-award, and task rows are rebuilt by regeneration — so the
+ *  at-most-once-per-dayKey guarantee needs its own row, exactly like `plan_lesson_offer`. */
+export const planDayAward = sqliteTable('plan_day_award', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  day: text('day').notNull(), // local dayKey of the completed plan day
+  awardedAt: integer('awarded_at', { mode: 'timestamp' }).notNull()
+}, (t) => [uniqueIndex('plan_day_award_day_idx').on(t.day)])
 
 export type PlanSettingsRow = typeof planSettings.$inferSelect
 export type PlanTaskRow = typeof planTask.$inferSelect

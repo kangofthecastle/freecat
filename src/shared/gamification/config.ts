@@ -6,6 +6,7 @@ export const REWARDS_CONFIG = {
   xpPerActivity: 10,     // XP earned per activity event (XP is progression, never spent)
   dailyGoal: 20,         // activities/day that earns the once-daily bonus
   dailyGoalBonus: 10,    // coin bonus for hitting the daily goal
+  planDayBonus: 5,       // activity-equivalents credited once when a plan day's required tasks all complete
   eggPrice: 100,
   treatPrice: 20,
   // incubation

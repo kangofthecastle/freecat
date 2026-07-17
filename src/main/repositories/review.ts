@@ -110,9 +110,19 @@ async function earliestSched(db: DB, subtree: number[], extra: ReturnType<typeof
   return row
 }
 
+/** How the "next new card" is picked (the Plan module's `newCardOrder` setting, injected by the IPC
+ *  layer so this module never reads plan tables): 'deck' = import order (lowest card id), 'shuffled'
+ *  = a uniformly random not-yet-introduced card per pick (Anki's "random order" flavor). */
+export type NewCardOrder = 'deck' | 'shuffled'
+
 /** The next card to study, in Anki-like priority order (see the numbered steps). `null` = deck not
  *  found. Every branch carries fresh `counts` so the renderer's header updates in lockstep. */
-export async function nextReviewCard(db: DB, deckId: number, now: Date): Promise<NextReviewCard | null> {
+export async function nextReviewCard(
+  db: DB,
+  deckId: number,
+  now: Date,
+  newOrder: NewCardOrder = 'deck'
+): Promise<NextReviewCard | null> {
   const subtree = await deckSubtreeIds(db, deckId)
   if (subtree === null) return null
   const counts = await computeCounts(db, subtree, now)
@@ -130,7 +140,7 @@ export async function nextReviewCard(db: DB, deckId: number, now: Date): Promise
     const [newCard] = await db.select({ cardId: cards.id })
       .from(cards).leftJoin(cardScheduling, eq(cardScheduling.cardId, cards.id))
       .where(and(inArray(cards.deckId, subtree), inArray(cards.renderKind, [...REVIEWABLE]), isNull(cardScheduling.id)))
-      .orderBy(asc(cards.id)).limit(1)
+      .orderBy(newOrder === 'shuffled' ? sql`RANDOM()` : asc(cards.id)).limit(1)
     if (newCard) return { done: false, cardId: newCard.cardId, counts, preview: previewIntervals(null, now) }
   }
 

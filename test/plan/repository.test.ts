@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { and, eq, gte } from 'drizzle-orm'
 import { type DB } from '../../src/main/db/client'
 import { createTestDb } from '../helpers/db'
@@ -12,7 +12,10 @@ import {
 } from '../../src/main/repositories/plan'
 import { computeRampDays } from '../../src/main/plan/fsrs-ramp'
 import { NEW_PER_DAY } from '../../src/main/repositories/review'
-import { planTask, planLessonOffer, lessonProgress } from '../../src/main/db/schema'
+import { planTask, planLessonOffer, planDayAward, lessonProgress } from '../../src/main/db/schema'
+import { ok } from '../../src/shared/dto'
+import type { ActivityResult, ServiceResult } from '../../src/shared/dto'
+import { REWARDS_CONFIG } from '../../src/shared/gamification/config'
 
 const NOW = new Date('2026-07-17T12:00:00Z')
 const TZ = 'UTC'
@@ -281,5 +284,76 @@ describe('setPlanTaskStatus', () => {
     await db.update(planTask).set({ status: 'expired' }).where(eq(planTask.id, row!.id))
     const res = await setPlanTaskStatus(db, { taskId: row!.id, status: 'completed' }, NOW)
     expect(res.ok).toBe(false)
+  })
+})
+
+describe('plan.day award (once per dayKey, by construction)', () => {
+  const insertTask = async (over: Partial<typeof planTask.$inferInsert> = {}): Promise<number> => {
+    const [row] = await db
+      .insert(planTask)
+      .values({
+        day: TODAY, kind: 'questions', taxonomyRef: 'physics.mechanics', refine: null,
+        targetCount: 6, minutes: 9, optional: false, status: 'pending', why: '', sortOrder: 0,
+        createdAt: NOW, updatedAt: NOW, ...over
+      })
+      .returning({ id: planTask.id })
+    return row!.id
+  }
+  const activityStub: ActivityResult = {
+    streak: 1, daily: { count: 5, goal: 20, met: false }, eggBecameReady: false, goalJustMet: false
+  }
+  const spy = () => vi.fn(async (): Promise<ServiceResult<ActivityResult>> => ok(activityStub))
+  const unwrap = <T,>(r: ServiceResult<T>): T => {
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`)
+    return r.data
+  }
+
+  it('fires exactly once, when the LAST required task completes; optional lessons never gate it', async () => {
+    const a = await insertTask({ sortOrder: 0 })
+    const b = await insertTask({ sortOrder: 1, kind: 'flashcards', taxonomyRef: null })
+    await insertTask({ sortOrder: 2, kind: 'lesson', optional: true }) // stays pending, must not block
+    const record = spy()
+
+    const first = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record }))
+    expect(first.activity).toBeNull() // day not complete yet
+    const second = unwrap(await setPlanTaskStatus(db, { taskId: b, status: 'completed' }, NOW, { recordActivityFn: record }))
+    expect(second.activity).not.toBeNull()
+
+    expect(record).toHaveBeenCalledTimes(1)
+    expect(record).toHaveBeenCalledWith(db, expect.objectContaining({ kind: 'plan.day', count: REWARDS_CONFIG.planDayBonus }))
+    expect(await db.select().from(planDayAward)).toHaveLength(1)
+  })
+
+  it('un-complete then re-complete cannot double-award — the marker row is durable', async () => {
+    const a = await insertTask()
+    const record = spy()
+    await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record })
+    await setPlanTaskStatus(db, { taskId: a, status: 'pending' }, NOW, { recordActivityFn: record })
+    const again = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record }))
+    expect(again.activity).toBeNull()
+    expect(record).toHaveBeenCalledTimes(1)
+  })
+
+  it('a skipped required task does not block the award (a skip is agency); other days award separately', async () => {
+    const a = await insertTask({ sortOrder: 0 })
+    const b = await insertTask({ sortOrder: 1 })
+    const record = spy()
+    await setPlanTaskStatus(db, { taskId: b, status: 'skipped' }, NOW, { recordActivityFn: record })
+    expect(unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: record })).activity).not.toBeNull()
+
+    const yesterday = await insertTask({ day: '2026-07-16' })
+    expect(unwrap(await setPlanTaskStatus(db, { taskId: yesterday, status: 'completed' }, NOW, { recordActivityFn: record })).activity).not.toBeNull()
+    expect(record).toHaveBeenCalledTimes(2)
+    expect(await db.select().from(planDayAward)).toHaveLength(2)
+  })
+
+  it('a gamification failure degrades to activity:null — the status change itself still lands', async () => {
+    const a = await insertTask()
+    const boom = vi.fn(async (): Promise<ServiceResult<ActivityResult>> => {
+      throw new Error('boom')
+    })
+    const res = unwrap(await setPlanTaskStatus(db, { taskId: a, status: 'completed' }, NOW, { recordActivityFn: boom }))
+    expect(res.task.status).toBe('completed')
+    expect(res.activity).toBeNull()
   })
 })

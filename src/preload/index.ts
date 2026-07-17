@@ -35,7 +35,8 @@ const api: FreecatApi = {
     submitAnswer: (input) => ipcRenderer.invoke(CH.qbankSubmitAnswer, input),
     completeSession: (sessionId) => ipcRenderer.invoke(CH.qbankCompleteSession, sessionId),
     toggleFlag: (questionId) => ipcRenderer.invoke(CH.qbankToggleFlag, questionId),
-    questionsForTaxonomy: (topicSlug) => ipcRenderer.invoke(CH.qbankQuestionsForTaxonomy, topicSlug)
+    questionsForTaxonomy: (topicSlug) => ipcRenderer.invoke(CH.qbankQuestionsForTaxonomy, topicSlug),
+    availability: () => ipcRenderer.invoke(CH.qbankAvailability)
   },
   stats: {
     overview: () => ipcRenderer.invoke(CH.statsOverview)
