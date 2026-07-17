@@ -41,14 +41,20 @@ export const questionsForTaxonomySchema = z.string().min(1).max(128)
 export interface QbankIpcOptions {
   /** Injected clock for testability; defaults to wall-clock. */
   now?: () => Date
+  /** Fired after a successfully graded answer — main/index.ts wires the plan's debounced
+   *  regeneration here (this module knows a callback, not the Plan module). */
+  onActivity?: () => void
 }
 
 export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOptions = {}): void {
   const now = opts.now ?? (() => new Date())
   ipcMain.handle(CH.qbankStartSession, (_e, raw: unknown) =>
     planSession(index, db, startSessionSchema.parse(raw), { now: now(), rng: Math.random }))
-  ipcMain.handle(CH.qbankSubmitAnswer, (_e, raw: unknown) =>
-    gradeAndRecord(index, db, submitAnswerSchema.parse(raw), { now: now() }))
+  ipcMain.handle(CH.qbankSubmitAnswer, async (_e, raw: unknown) => {
+    const result = await gradeAndRecord(index, db, submitAnswerSchema.parse(raw), { now: now() })
+    if (result.ok) opts.onActivity?.()
+    return result
+  })
   // Mark the session complete (writes completedAt; throws if the row is missing) AND return the
   // summary the renderer expects. completeSession is the side-effect; summarize is the return value.
   // A missing-session throw propagates as an IPC rejection — the renderer's completeSession is typed

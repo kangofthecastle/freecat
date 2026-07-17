@@ -233,6 +233,98 @@ export interface StatsOverview {
   flashcards: FlashcardLoadDto
 }
 
+// ── Plan (Module 5) DTOs — engine + debug surface (Phase 2); the full UI arrives in Phase 3 ──
+export type PlanTaskKind = 'flashcards' | 'questions' | 'lesson'
+export type PlanTaskStatus = 'pending' | 'started' | 'completed' | 'skipped' | 'expired'
+
+export interface PlanSettingsDto {
+  examDate: string | null // local dayKey; null = habit mode
+  dailyBudgetMinutes: number
+  dailyNewTarget: number | null // flashcards triangle: set one, the other derives
+  masteryGoalPct: number | null
+  finishBufferDays: number
+  questionsStartDay: string | null
+  questionsFinishBufferDays: number
+  newCardOrder: 'deck' | 'shuffled'
+  onboardedAt: Date | null
+}
+
+/** Partial settings save. The flashcards pacing pair is edited via `pacingEdit` (pick one, the
+ *  other derives — never sent as a raw pair, so workload can't be raised silently). */
+export interface SavePlanSettingsInput {
+  examDate?: string | null
+  dailyBudgetMinutes?: number
+  pacingEdit?: { field: 'dailyNew' | 'goalPct'; value: number }
+  finishBufferDays?: number
+  questionsStartDay?: string | null
+  questionsFinishBufferDays?: number
+  newCardOrder?: 'deck' | 'shuffled'
+  onboarded?: boolean
+}
+export interface PacingOutcomeDto {
+  ok: boolean
+  derived: { dailyNew: number; goalPct: number }
+  refusalReason?: string
+}
+export interface SavePlanSettingsResult {
+  settings: PlanSettingsDto
+  pacing: PacingOutcomeDto | null // present when the save touched the triangle
+}
+
+export interface PlanPrefDto {
+  taxonomyRef: string // discipline key (inherited by its topics) or topic slug (override)
+  comfort: number | null // 1–5; planner-only, never Stats
+  excluded: boolean
+}
+
+export interface PlanTaskDto {
+  id: number
+  day: string
+  kind: PlanTaskKind
+  taxonomyRef: string | null
+  refine: 'incorrect' | null // 'incorrect' = spaced mistake review
+  title: string // resolved display title (topic title / 'Flashcards' / 'Mistake review')
+  targetCount: number
+  minutes: number
+  optional: boolean
+  status: PlanTaskStatus
+  why: string
+  sortOrder: number
+}
+
+export interface PlanTriangleDto {
+  rampDays: number
+  window: number
+  introductionsNeeded: number
+  requiredDailyNew: number
+  reachableGoalPct: number
+  dailyNewCeiling: number
+  deckSize: number
+  introducedSoFar: number
+  daysToFinish: number
+}
+
+export interface PlanProgressDto {
+  streak: number
+  completionRate: number | null
+  onTrack: 'on-track' | 'neutral' | 'falling-behind' | null
+  skipRate: number | null // A5: displayed beside the streak so skips can't read as perfection
+}
+
+export interface PlanView {
+  settings: PlanSettingsDto
+  days: { day: string; tasks: PlanTaskDto[] }[] // today + 6
+  prefs: PlanPrefDto[]
+  progress: PlanProgressDto
+  triangle: PlanTriangleDto | null // null in habit mode (no exam date)
+  behindPace: boolean
+}
+
+export interface SetPlanTaskStatusInput {
+  taskId: number
+  status: 'pending' | 'started' | 'completed' | 'skipped' // 'expired' is system-only
+}
+
 // --- Flashcards DTOs ---
 export interface DeckSetSummary { id: number; sourceFilename: string; deckCount: number; cardCount: number; importedAt: Date }
 export interface DeckNode { deckId: number; name: string; leafName: string; cardCount: number; children: DeckNode[] }

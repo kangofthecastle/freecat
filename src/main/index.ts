@@ -9,6 +9,8 @@ import { registerTaxonomyIpc } from './ipc/taxonomy'
 import { registerQbankIpc } from './ipc/qbank'
 import { registerFlashcardsIpc } from './ipc/flashcards'
 import { registerStatsIpc } from './ipc/stats'
+import { registerPlanIpc } from './ipc/plan'
+import { createPlanRegenerator } from './repositories/plan'
 import { ensureStarterGrant } from './repositories/activity'
 import { seedTaxonomy } from './repositories/taxonomy'
 import { TOPICS } from './db/seed/taxonomy-data'
@@ -120,13 +122,22 @@ app.whenReady().then(async () => {
   const lessonStore = createLessonStore(root, new Set(TOPICS.map((t) => t.slug)))
   const index = buildContentIndex(root)
 
+  // Plan regeneration triggers (roadmap: event-driven replaces cron): app launch below, immediate
+  // on settings/prefs saves inside registerPlanIpc, and debounced after study writes via onActivity.
+  const lessonSlugs: ReadonlySet<string> = new Set(TOPICS.filter((t) => lessonStore.has(t.slug)).map((t) => t.slug))
+  const planRegen = createPlanRegenerator(db, { index, lessonSlugs })
+
   registerProfileIpc(db)
   registerGamificationIpc(db)
-  registerContentReviewIpc(db, lessonStore)
+  registerContentReviewIpc(db, lessonStore, { onActivity: planRegen.schedule })
   registerTaxonomyIpc(db)
-  registerQbankIpc(db, index)
-  registerFlashcardsIpc(db)
+  registerQbankIpc(db, index, { onActivity: planRegen.schedule })
+  registerFlashcardsIpc(db, { onActivity: planRegen.schedule })
   registerStatsIpc(db, index)
+  registerPlanIpc(db, index, lessonSlugs, planRegen)
+
+  // Launch regeneration covers the overnight roll (yesterday's pending expires, a fresh today lands).
+  void planRegen.regenerate()
 
   protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
 
