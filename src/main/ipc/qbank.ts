@@ -65,8 +65,13 @@ export function registerQbankIpc(db: DB, index: ContentIndex, opts: QbankIpcOpti
     await completeSession(db, sessionId, now())
     return summarize(db, sessionId)
   })
-  ipcMain.handle(CH.qbankToggleFlag, async (_e, raw: unknown) =>
-    ok(await toggleFlag(db, toggleFlagSchema.parse(raw), now())))
+  ipcMain.handle(CH.qbankToggleFlag, async (_e, raw: unknown) => {
+    const result = await toggleFlag(db, toggleFlagSchema.parse(raw), now())
+    // Flags feed the plan's mistake-review eligibility (flagged = always eligible) — a flag toggle
+    // must re-plan just like an answer does, or "flag it for tomorrow" silently does nothing.
+    opts.onActivity?.()
+    return ok(result)
+  })
   ipcMain.handle(CH.qbankQuestionsForTaxonomy, (_e, raw: unknown): QuestionRef[] => {
     const topic = questionsForTaxonomySchema.parse(raw)
     return (index.byTopic.get(topic) ?? []).map((id) => ({ id, topic }))

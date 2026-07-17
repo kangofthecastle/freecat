@@ -65,9 +65,15 @@ export interface MaterializeDayInput {
   mistakeCandidates: MistakeCandidate[] // repository passes [] for future (speculative) days
   questionsStarted: boolean // false before the questions-track start day
   behindPace: boolean // scales the exploration boost (coverage is the schedulable target)
-  // Same-day skip guard (ported): a regen must never resurrect something skipped today.
-  skippedTopics?: string[]
+  // Same-day skip guards (ported): a regen must never resurrect something skipped that day.
+  // Lesson skips are tracked SEPARATELY from practice skips — declining a 10-minute lesson must
+  // never cost the topic its questions practice (and vice versa).
+  skippedTopics?: string[] // topics whose PRACTICE was skipped: drop from practice + mistake candidates
+  skippedLessonTopics?: string[] // topics whose LESSON task was skipped: suppress the pairing only
   skippedKinds?: PlanSkipKind[]
+  /** Topics whose lesson already exists elsewhere in this regeneration's horizon (an earlier day's
+   *  emission or a surviving row) — a lesson appears at most once across the whole horizon. */
+  lessonAlreadyPlanned?: string[]
 }
 
 const QUESTION_MIN = PLAN_CONFIG.questionSeconds / 60
@@ -109,6 +115,7 @@ export function materializeDay(input: MaterializeDayInput): PlannedTask[] {
 
   const suppressKinds = new Set(input.skippedKinds ?? [])
   const skippedTopics = new Set(input.skippedTopics ?? [])
+  const lessonSuppressed = new Set([...(input.skippedLessonTopics ?? []), ...(input.lessonAlreadyPlanned ?? [])])
   const candidates: PlannedTask[] = []
 
   // (a) Flashcards — due reviews + the day's new-card allowance.
@@ -181,7 +188,7 @@ export function materializeDay(input: MaterializeDayInput): PlannedTask[] {
       // triggers: the one-time new-topic OFFER (repository consulted plan_lesson_offer) and the
       // repeated-distractor RETEACH (the misconception wants the concept, not more reps).
       const reteach = t.dominantMode === 'repeated_distractor'
-      if (t.lessonAvailable && !t.lessonCompleted && !skippedTopics.has(t.topic) && (t.offerLesson || reteach)) {
+      if (t.lessonAvailable && !t.lessonCompleted && !lessonSuppressed.has(t.topic) && (t.offerLesson || reteach)) {
         candidates.push({
           kind: 'lesson', taxonomyRef: t.topic, refine: null,
           targetCount: 1, minutes: PLAN_CONFIG.lessonMinutes, optional: true,
@@ -202,17 +209,22 @@ export function materializeDay(input: MaterializeDayInput): PlannedTask[] {
   return greedyFill(candidates, input.budgetMinutes - (input.usedMinutes ?? 0))
 }
 
-/** Take tasks in order while budget remains, stopping AFTER the first required task that crosses it.
- *  OPTIONAL tasks (lessons) are budget-EXEMPT — but an optional task is only kept while its paired
- *  required work is still being scheduled (rem > 0), so a lesson never dangles after the budget ran
- *  out before its practice set. */
+/** Take tasks in order while budget remains, stopping AFTER the first required task that crosses it
+ *  (last-task overflow). OPTIONAL tasks (lessons) are budget-EXEMPT and ALWAYS kept — ported
+ *  semantics: an ignored optional lesson must not starve practice, and a busy day (flashcards +
+ *  mistakes filling the budget) must not silently swallow a first-encounter lesson offer that costs
+ *  zero budget minutes. A standalone lesson without its practice set is still a sensible suggestion. */
 function greedyFill(candidates: PlannedTask[], remainingBudget: number): PlannedTask[] {
   const out: PlannedTask[] = []
   let rem = remainingBudget
   for (const t of candidates) {
+    if (t.optional) {
+      out.push(t)
+      continue
+    }
     if (rem <= 0) break
     out.push(t)
-    if (!t.optional) rem -= t.minutes
+    rem -= t.minutes
   }
   return out
 }

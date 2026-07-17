@@ -59,6 +59,8 @@ export function registerContentReviewIpc(db: DB, store: LessonStore, opts: Conte
       return result
     }
     await setCompleted(db, p.slug, false)
+    // Un-completing also re-plans: lessonCompleted gates the plan's lesson offers/reteach.
+    opts.onActivity?.()
     const row = await getProgressForSlug(db, p.slug)
     return ok({ status: deriveStatus(row) })
   })

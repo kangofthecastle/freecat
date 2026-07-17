@@ -2,7 +2,7 @@ import { and, eq, gte, lt, lte, inArray, sql, count } from 'drizzle-orm'
 import type { DB } from '../db/client'
 import {
   planSettings, planTask, planTaxonomyPref, planLessonOffer,
-  cardScheduling, cards, lessonProgress,
+  cardScheduling, cards, lessonProgress, qbankAttempt,
   type PlanSettingsRow, type PlanTaskRow
 } from '../db/schema'
 import type {
@@ -13,13 +13,13 @@ import type {
 import { ok, err } from '../../shared/dto'
 import type { ContentIndex } from '../content/types'
 import { DISCIPLINES, TOPICS } from '../db/seed/taxonomy-data'
-import { dayKeyInTz, addDaysToKey } from '../../shared/gamification/dates'
+import { dayKeyInTz, addDaysToKey, dayNumberOfKey } from '../../shared/gamification/dates'
 import { STATS_CONFIG } from '../stats/config'
 import { computeMastery } from '../stats/mastery'
 import { classifyFingerprints, type FingerprintAttempt } from '../stats/fingerprints'
 import { PLAN_CONFIG } from '../plan/config'
 import { computeRampDays } from '../plan/fsrs-ramp'
-import { flashcardTriangle, validatePacing, questionsBehindPace, type Triangle } from '../plan/pacing'
+import { flashcardTriangle, validatePacing, questionsBehindPace, clampDailyNew, type Triangle } from '../plan/pacing'
 import { plannerShrunkMastery, type Comfort } from '../plan/comfort'
 import {
   materializeDay, type PlanTopic, type MistakeCandidate, type PlanSkipKind, type PlannedTask
@@ -37,8 +37,7 @@ const TOPIC_TITLE: ReadonlyMap<string, string> = new Map(TOPICS.map((t) => [t.sl
 const DISCIPLINE_TITLE: ReadonlyMap<string, string> = new Map(DISCIPLINES.map((d) => [d.slug, d.title]))
 
 const DAY_MS = 86_400_000
-const dayNum = (k: string): number =>
-  Date.UTC(Number(k.slice(0, 4)), Number(k.slice(5, 7)) - 1, Number(k.slice(8, 10))) / DAY_MS
+const dayNum = dayNumberOfKey
 
 // ── Settings ──
 
@@ -74,7 +73,10 @@ export async function getPlanSettings(db: DB): Promise<PlanSettingsDto> {
   return toSettingsDto(row)
 }
 
-/** Flashcards-pool aggregates the triangle plans against (all imported decks, reviewable cards). */
+/** Flashcards-pool aggregates the triangle plans against (all imported decks, reviewable cards).
+ *  DELIBERATE SIMPLIFICATION: the reviewer's NEW_PER_DAY limit is per studied deck SUBTREE, but the
+ *  plan paces globally at one NEW_PER_DAY — exact for the common one-big-deck MCAT setup, and
+ *  conservative (never over-promises) for multi-deck users. Per-deck triangles are a Phase 3+ call. */
 async function flashcardPool(db: DB, todayKey: string): Promise<{ deckSize: number; introducedSoFar: number; introducedToday: number }> {
   const [[size], [intro], [today]] = await Promise.all([
     db.select({ n: count() }).from(cards).where(inArray(cards.renderKind, [...REVIEWABLE])),
@@ -135,7 +137,7 @@ export async function savePlanSettings(
       // No exam date ⇒ no triangle: a dailyNew edit stores directly (habit-mode new-card pace);
       // a goal has nothing to be derived against and is refused as meaningless.
       if (input.pacingEdit.field === 'dailyNew') {
-        next.dailyNewTarget = Math.max(0, Math.min(NEW_PER_DAY, Math.round(input.pacingEdit.value)))
+        next.dailyNewTarget = clampDailyNew(input.pacingEdit.value, NEW_PER_DAY)
         next.masteryGoalPct = null
         pacing = { ok: true, derived: { dailyNew: next.dailyNewTarget, goalPct: 0 } }
       } else {
@@ -197,15 +199,19 @@ export async function getPlanPrefs(db: DB): Promise<PlanPrefDto[]> {
 }
 
 export async function savePlanPrefs(db: DB, prefs: PlanPrefDto[], now = new Date()): Promise<void> {
-  for (const p of prefs) {
-    await db
-      .insert(planTaxonomyPref)
-      .values({ taxonomyRef: p.taxonomyRef, comfort: p.comfort, excluded: p.excluded, updatedAt: now })
-      .onConflictDoUpdate({
-        target: planTaxonomyPref.taxonomyRef,
-        set: { comfort: p.comfort, excluded: p.excluded, updatedAt: now }
-      })
-  }
+  if (prefs.length === 0) return
+  // One transaction: an onboarding sweep (up to 200 rows) commits atomically, not row-by-row.
+  await db.transaction(async (tx) => {
+    for (const p of prefs) {
+      await tx
+        .insert(planTaxonomyPref)
+        .values({ taxonomyRef: p.taxonomyRef, comfort: p.comfort, excluded: p.excluded, updatedAt: now })
+        .onConflictDoUpdate({
+          target: planTaxonomyPref.taxonomyRef,
+          set: { comfort: p.comfort, excluded: p.excluded, updatedAt: now }
+        })
+    }
+  })
 }
 
 // ── Task status ──
@@ -343,13 +349,26 @@ async function loadPlanEvidence(
     }
   }
 
-  let firstAttemptKey: string | null = null
-  for (const a of attempts) {
-    const k = dayKeyInTz(a.answeredAt, tz)
-    if (firstAttemptKey == null || k < firstAttemptKey) firstAttemptKey = k
-  }
+  const facts = paceFacts(attempts, tz)
+  return { topics, mistakeCandidates, attemptedDistinct: facts.attemptedDistinct, firstAttemptKey: facts.firstAttemptKey }
+}
 
-  return { topics, mistakeCandidates, attemptedDistinct: latest.size, firstAttemptKey }
+/** Questions-pace facts from a lightweight (questionId, answeredAt) projection — one implementation
+ *  shared by evidence loading and the view, so the two behindPace computations can never disagree. */
+function paceFacts(
+  rows: { questionId: string; answeredAt: Date }[],
+  tz: string
+): { attemptedDistinct: number; firstAttemptKey: string | null } {
+  const seen = new Set<string>()
+  let firstMs = Infinity
+  for (const r of rows) {
+    seen.add(r.questionId)
+    if (r.answeredAt.getTime() < firstMs) firstMs = r.answeredAt.getTime()
+  }
+  return {
+    attemptedDistinct: seen.size,
+    firstAttemptKey: Number.isFinite(firstMs) ? dayKeyInTz(new Date(firstMs), tz) : null
+  }
 }
 
 /**
@@ -402,27 +421,40 @@ export async function regeneratePlan(db: DB, ctx: PlanContext): Promise<void> {
     todayKey
   })
 
-  // Today's rows: skip guards + minutes already committed.
+  // Existing horizon rows (any status): the resurrect/duplicate guards are PER DAY, not today-only —
+  // a task skipped or completed on day+2 must not come back when day+2 re-materializes.
   const horizonEnd = addDaysToKey(todayKey, PLAN_CONFIG.horizonDays - 1)
-  const todays = await db.select().from(planTask).where(eq(planTask.day, todayKey))
-  const skippedTopics = todays.filter((t) => t.status === 'skipped' && t.taxonomyRef != null).map((t) => t.taxonomyRef!)
-  const skippedKinds: PlanSkipKind[] = todays
-    .filter((t) => t.status === 'skipped')
-    .map((t) => (t.refine === 'incorrect' ? 'mistakes' : (t.kind as PlanSkipKind)))
-  const usedMinutes = todays
-    .filter((t) => (t.status === 'started' || t.status === 'completed') && !t.optional)
-    .reduce((sum, t) => sum + t.minutes, 0)
-  // A task kind already started/completed today must not re-materialize as a duplicate pending row.
-  const survivingKeys = new Set(
-    todays
-      .filter((t) => t.status !== 'pending' && t.status !== 'expired')
-      .map((t) => `${t.kind}|${t.taxonomyRef ?? ''}|${t.refine ?? ''}`)
+  const horizonRows = await db
+    .select()
+    .from(planTask)
+    .where(and(gte(planTask.day, todayKey), lte(planTask.day, horizonEnd)))
+  const rowsByDay = new Map<string, PlanTaskRow[]>()
+  for (const r of horizonRows) {
+    const arr = rowsByDay.get(r.day) ?? []
+    arr.push(r)
+    rowsByDay.set(r.day, arr)
+  }
+  const taskKey = (t: { kind: string; taxonomyRef: string | null; refine: string | null }): string =>
+    `${t.kind}|${t.taxonomyRef ?? ''}|${t.refine ?? ''}`
+  // A lesson appears at most once across the horizon: seed with surviving lesson rows anywhere in it.
+  const lessonPlanned = new Set(
+    horizonRows
+      .filter((r) => r.kind === 'lesson' && r.status !== 'pending' && r.status !== 'expired' && r.taxonomyRef != null)
+      .map((r) => r.taxonomyRef!)
   )
 
   const days: { day: string; tasks: PlannedTask[] }[] = []
   let poolRemaining = Math.max(0, pool.deckSize - pool.introducedSoFar)
   for (let i = 0; i < PLAN_CONFIG.horizonDays; i++) {
     const day = addDaysToKey(todayKey, i)
+    const rows = rowsByDay.get(day) ?? []
+    const skipped = rows.filter((r) => r.status === 'skipped')
+    const surviving = rows.filter((r) => r.status !== 'pending' && r.status !== 'expired')
+    const survivingKeys = new Set(surviving.map(taskKey))
+    const usedMinutes = rows
+      .filter((r) => (r.status === 'started' || r.status === 'completed') && !r.optional)
+      .reduce((sum, r) => sum + r.minutes, 0)
+
     const questionsStarted = settings.questionsStartDay == null || day >= settings.questionsStartDay
     const newAllowance = i === 0 ? Math.max(0, dailyNewResolved - pool.introducedToday) : dailyNewResolved
     const newCardCount = Math.min(newAllowance, poolRemaining)
@@ -430,19 +462,31 @@ export async function regeneratePlan(db: DB, ctx: PlanContext): Promise<void> {
     let tasks = materializeDay({
       day,
       budgetMinutes: settings.dailyBudgetMinutes,
-      usedMinutes: i === 0 ? usedMinutes : 0,
+      usedMinutes,
       topics: evidence.topics,
       dueCardCount: dueCounts.get(day) ?? 0,
       newCardCount,
       mistakeCandidates: i === 0 ? evidence.mistakeCandidates : [], // future days are speculative
       questionsStarted,
       behindPace,
-      skippedTopics: i === 0 ? skippedTopics : [],
-      skippedKinds: i === 0 ? skippedKinds : []
+      // Lesson skips are separate from practice skips: declining a lesson never costs the practice.
+      skippedTopics: skipped
+        .filter((r) => r.kind === 'questions' && r.refine == null && r.taxonomyRef != null)
+        .map((r) => r.taxonomyRef!),
+      skippedLessonTopics: skipped
+        .filter((r) => r.kind === 'lesson' && r.taxonomyRef != null)
+        .map((r) => r.taxonomyRef!),
+      skippedKinds: skipped
+        .map((r): PlanSkipKind | null =>
+          r.refine === 'incorrect' ? 'mistakes' : r.kind === 'flashcards' ? 'flashcards' : null
+        )
+        .filter((k): k is PlanSkipKind => k != null),
+      lessonAlreadyPlanned: [...lessonPlanned]
     })
-    if (i === 0 && survivingKeys.size > 0) {
-      tasks = tasks.filter((t) => !survivingKeys.has(`${t.kind}|${t.taxonomyRef ?? ''}|${t.refine ?? ''}`))
+    if (survivingKeys.size > 0) {
+      tasks = tasks.filter((t) => !survivingKeys.has(taskKey(t)))
     }
+    for (const t of tasks) if (t.kind === 'lesson' && t.taxonomyRef != null) lessonPlanned.add(t.taxonomyRef)
     days.push({ day, tasks })
   }
 
@@ -525,17 +569,15 @@ export async function getPlanView(db: DB, ctx: PlanContext): Promise<PlanView> {
       }
     : null
 
-  const attempts = await loadAttempts(db)
-  const latest = latestPerQuestion(attempts)
-  let firstAttemptKey: string | null = null
-  for (const a of attempts) {
-    const k = dayKeyInTz(a.answeredAt, tz)
-    if (firstAttemptKey == null || k < firstAttemptKey) firstAttemptKey = k
-  }
+  // Lightweight projection (not full rows) — the view only needs the pace facts.
+  const paceRows = await db
+    .select({ questionId: qbankAttempt.questionId, answeredAt: qbankAttempt.answeredAt })
+    .from(qbankAttempt)
+  const facts = paceFacts(paceRows, tz)
   const behindPace = questionsBehindPace({
     publishedTotal: ctx.index.allQuestionIds.length,
-    attemptedDistinct: latest.size,
-    startKey: settings.questionsStartDay ?? firstAttemptKey ?? todayKey,
+    attemptedDistinct: facts.attemptedDistinct,
+    startKey: settings.questionsStartDay ?? facts.firstAttemptKey ?? todayKey,
     finishKey: settings.examDate != null ? addDaysToKey(settings.examDate, -settings.questionsFinishBufferDays) : null,
     todayKey
   })
@@ -575,7 +617,9 @@ export function createPlanRegenerator(
   let dirty = false
   let timer: NodeJS.Timeout | null = null
 
-  const run = async (): Promise<void> => {
+  // Failures PROPAGATE from `regenerate()` — an IPC save must not report ok over a stale plan.
+  // The background `schedule()` path is the one that logs-and-swallows (nothing is waiting on it).
+  const run = (): Promise<void> => {
     if (running) {
       dirty = true
       return running
@@ -586,8 +630,6 @@ export function createPlanRegenerator(
           dirty = false
           await regeneratePlan(db, ctx)
         } while (dirty)
-      } catch (e) {
-        onError(e)
       } finally {
         running = null
       }
@@ -601,7 +643,7 @@ export function createPlanRegenerator(
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
-        void run()
+        run().catch(onError)
       }, debounceMs)
     }
   }

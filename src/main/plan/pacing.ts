@@ -1,4 +1,5 @@
 import { PLAN_CONFIG } from './config'
+import { dayNumberOfKey } from '../../shared/gamification/dates'
 
 /**
  * Flashcard pacing triangle — ported from sat-world's `vocabTriangle`, with `rampDays` supplied by
@@ -37,6 +38,12 @@ export interface Triangle {
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
+
+/** The one clamp for a user-entered daily-new count — every write path (triangle validation AND the
+ *  habit-mode direct store) goes through here, so the ceiling rule can never fork. */
+export function clampDailyNew(value: number, ceiling: number): number {
+  return clamp(Math.round(value), 0, ceiling)
+}
 
 export function flashcardTriangle(input: TriangleInput): Triangle {
   const { deckSize, introducedSoFar, rampDays, dailyNewCeiling } = input
@@ -119,7 +126,7 @@ export interface QuestionsPaceInput {
 export function questionsBehindPace(input: QuestionsPaceInput): boolean {
   if (input.finishKey == null || input.publishedTotal <= 0) return false
   if (input.todayKey < input.startKey || input.finishKey <= input.startKey) return false
-  const dayNum = (k: string): number => Date.UTC(Number(k.slice(0, 4)), Number(k.slice(5, 7)) - 1, Number(k.slice(8, 10))) / 86_400_000
+  const dayNum = dayNumberOfKey
   const elapsed = Math.min(1, (dayNum(input.todayKey) - dayNum(input.startKey)) / (dayNum(input.finishKey) - dayNum(input.startKey)))
   const attained = Math.min(1, input.attemptedDistinct / input.publishedTotal)
   return attained < elapsed - PLAN_CONFIG.behindPaceSlack

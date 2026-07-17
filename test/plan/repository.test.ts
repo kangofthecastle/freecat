@@ -137,9 +137,11 @@ describe('regeneratePlan', () => {
     expect(mistakes[0]!.day).toBe(TODAY)
     expect(mistakes[0]!.targetCount).toBe(5)
 
-    // The mechanics lesson offer landed as an optional task AND a durable offer row.
+    // The mechanics lesson offer landed as an optional task AND a durable offer row — and appears
+    // exactly ONCE across the whole horizon, not on every day the topic ranks (regression: the
+    // offerLesson flag is computed once per regen, so per-day suppression must accumulate).
     const lessons = rows.filter((r) => r.kind === 'lesson')
-    expect(lessons.length).toBeGreaterThan(0)
+    expect(lessons).toHaveLength(1)
     expect(lessons.every((l) => l.optional)).toBe(true)
     const offers = await db.select().from(planLessonOffer)
     expect(offers.map((o) => o.lessonSlug)).toEqual(['physics.mechanics'])
@@ -177,6 +179,38 @@ describe('regeneratePlan', () => {
     expect(after.find((r) => r.id === practice.id)!.status).toBe('completed')
     // And its topic did not re-materialize as a duplicate pending task.
     expect(after.filter((r) => r.taxonomyRef === practice.taxonomyRef && r.kind === 'questions')).toHaveLength(1)
+  })
+
+  it('future-day resolved tasks never duplicate on regen (per-day survivor guard)', async () => {
+    await seedAttempts()
+    await regeneratePlan(db, ctx())
+    const rows = await db.select().from(planTask)
+    const future = rows.find((r) => r.day > TODAY && r.kind === 'questions' && r.refine == null)!
+    await setPlanTaskStatus(db, { taskId: future.id, status: 'skipped' }, NOW)
+
+    await regeneratePlan(db, ctx())
+    const after = await db
+      .select()
+      .from(planTask)
+      .where(and(eq(planTask.day, future.day), eq(planTask.kind, 'questions')))
+    const sameTopic = after.filter((r) => r.taxonomyRef === future.taxonomyRef && r.refine == null)
+    expect(sameTopic).toHaveLength(1) // the skipped row alone — no pending duplicate
+    expect(sameTopic[0]!.status).toBe('skipped')
+  })
+
+  it('skipping a lesson keeps the topic\'s practice on the plan', async () => {
+    await seedAttempts()
+    await regeneratePlan(db, ctx())
+    const rows = await db.select().from(planTask)
+    const lesson = rows.find((r) => r.kind === 'lesson')!
+    await setPlanTaskStatus(db, { taskId: lesson.id, status: 'skipped' }, NOW)
+
+    await regeneratePlan(db, ctx())
+    const after = await db.select().from(planTask).where(eq(planTask.day, lesson.day))
+    // practice for the lesson's topic is still planned…
+    expect(after.some((r) => r.kind === 'questions' && r.taxonomyRef === lesson.taxonomyRef)).toBe(true)
+    // …while the lesson did not resurrect
+    expect(after.filter((r) => r.kind === 'lesson' && r.taxonomyRef === lesson.taxonomyRef)).toHaveLength(1)
   })
 
   it('expires yesterday\'s pending on the next roll', async () => {

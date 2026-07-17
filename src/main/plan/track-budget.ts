@@ -34,11 +34,14 @@ export function allocateTrackBudget(input: TrackBudgetInput): TrackBudget {
   const questionsEnabled = input.questions?.enabled === true
 
   // Flashcards: floor = SRS due load, appetite = the day's introducible work, cap = flashcardsMaxMinutes.
+  // The floor is ALSO clamped at the cap: the materialized flashcards task never claims more than
+  // capMinutes (the reviewer serves an over-cap backlog off-plan), so an uncapped floor here would
+  // hoard budget the task won't use and silently starve the mistake-review cap downstream.
   const dueMinutes = f ? Math.max(0, f.dueMinutes) : 0
   const newMinutes = f ? Math.max(0, f.newMinutes) : 0
   const appetite = Math.min(dueMinutes + newMinutes, budget)
   const capMinutes = f ? Math.max(0, f.capMinutes) : 0
-  const floor = Math.min(dueMinutes, budget) // (a) never below the due load
+  const floor = Math.min(dueMinutes, capMinutes, budget) // (a) due load honored up to the cap
   let flashcards = f ? Math.min(Math.max(floor, Math.min(appetite, capMinutes)), budget) : 0
   let remaining = budget - flashcards
 

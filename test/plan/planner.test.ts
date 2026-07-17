@@ -170,6 +170,32 @@ describe('materializeDay', () => {
     expect(tasks.filter((x) => x.kind === 'lesson')).toHaveLength(0)
   })
 
+  test('a skipped LESSON suppresses only the pairing — the topic\'s practice still plans', () => {
+    const t = topic({ topic: 'a.t', lessonAvailable: true, offerLesson: true, mastery: 0.2 })
+    const tasks = materializeDay(dayInput({ topics: [t], skippedLessonTopics: ['a.t'] }))
+    expect(tasks.filter((x) => x.kind === 'lesson')).toHaveLength(0)
+    expect(tasks.some((x) => x.kind === 'questions' && x.taxonomyRef === 'a.t')).toBe(true)
+  })
+
+  test('lessonAlreadyPlanned suppresses re-emission (once per horizon), incl. the reteach trigger', () => {
+    const t = topic({
+      topic: 'a.t', lessonAvailable: true, offerLesson: true, mastery: 0.2,
+      dominantMode: 'repeated_distractor'
+    })
+    const tasks = materializeDay(dayInput({ topics: [t], lessonAlreadyPlanned: ['a.t'] }))
+    expect(tasks.filter((x) => x.kind === 'lesson')).toHaveLength(0)
+  })
+
+  test('optional lessons survive a budget already consumed by unrelated required work', () => {
+    // Flashcards fills the whole 6-minute budget; the zero-budget lesson offer must still appear.
+    const t = topic({ topic: 'a.t', lessonAvailable: true, offerLesson: true, mastery: 0.2 })
+    const tasks = materializeDay(dayInput({ budgetMinutes: 6, dueCardCount: 60, topics: [t] }))
+    expect(tasks.some((x) => x.kind === 'flashcards')).toBe(true)
+    expect(tasks.some((x) => x.kind === 'lesson' && x.taxonomyRef === 'a.t')).toBe(true)
+    // ...but its 9-minute practice set no longer fits
+    expect(tasks.some((x) => x.kind === 'questions')).toBe(false)
+  })
+
   test('greedy fill: stops after the first required task crossing the budget; optionals are exempt', () => {
     const topics = [
       topic({ topic: 'a.t', title: 'A', mastery: 0.1, lessonAvailable: true, offerLesson: true }),

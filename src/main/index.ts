@@ -137,7 +137,7 @@ app.whenReady().then(async () => {
   registerPlanIpc(db, index, lessonSlugs, planRegen)
 
   // Launch regeneration covers the overnight roll (yesterday's pending expires, a fresh today lands).
-  void planRegen.regenerate()
+  planRegen.regenerate().catch((e) => console.error('[plan] launch regeneration failed:', e))
 
   protocol.handle('freecat-media', createMediaHandler(db, flashcardsMediaDir()))
 

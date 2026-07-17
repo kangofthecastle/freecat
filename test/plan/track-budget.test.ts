@@ -14,13 +14,14 @@ describe('allocateTrackBudget (ported rules)', () => {
     expect(b.questions).toBe(20) // remainder
   })
 
-  test('(a) flashcards never squeezed below the SRS due load, even over the cap', () => {
+  test('(a) due-load floor is honored only up to the cap — the task never claims more, so the allocator must not hoard', () => {
     const b = allocateTrackBudget({
       budgetMinutes: 60,
       flashcards: { dueMinutes: 35, newMinutes: 0, capMinutes: 20 },
       questions: { enabled: true, behindPace: false }
     })
-    expect(b.flashcards).toBe(35) // due-load floor beats the 20-minute cap
+    expect(b.flashcards).toBe(20) // matches the materialized task's cap; the other 40 stays plannable
+    expect(b.questions).toBe(40)
   })
 
   test('(b) behind pace halves the mistake share, floored at min sizing; freed minutes reach questions', () => {
