@@ -21,7 +21,7 @@ export const LEARN_AHEAD_MS = 20 * 60 * 1000
 // Only these render kinds can actually be shown in the sandboxed iframe, so only they may enter a
 // queue or a count. Image-occlusion/unsupported cards rejoin automatically once their renderKind
 // becomes renderable in a later milestone — no data migration needed.
-const REVIEWABLE = ['basic', 'cloze'] as const
+export const REVIEWABLE = ['basic', 'cloze'] as const
 const LEARNING_STATES = [State.Learning, State.Relearning]
 
 /** Grading options, mirroring qbank's `GradeOptions`: an injectable gamification recorder so tests

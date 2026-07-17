@@ -27,6 +27,9 @@ export const reviewCardSchema = z.object({
 export interface FlashcardsIpcOptions {
   /** Injected clock for testability; defaults to wall-clock. Mirrors QbankIpcOptions. */
   now?: () => Date
+  /** Fired after a successfully applied study write — main/index.ts wires the plan's debounced
+   *  regeneration here (modules stay decoupled: this file knows a callback, not the Plan module). */
+  onActivity?: () => void
 }
 
 /** getCard → mintMediaToken → toCardView, as one unit. Both browse (`fcGetCard`) and study
@@ -62,8 +65,10 @@ export function registerFlashcardsIpc(db: DB, opts: FlashcardsIpcOptions = {}): 
     if (!view.ok) return view
     return ok({ done: false as const, card: view.data, counts: next.counts, preview: next.preview })
   })
-  ipcMain.handle(CH.fcReviewCard, (_e, raw: unknown) => {
+  ipcMain.handle(CH.fcReviewCard, async (_e, raw: unknown) => {
     const input = reviewCardSchema.parse(raw)
-    return gradeReview(db, input.cardId, input.rating, now())
+    const result = await gradeReview(db, input.cardId, input.rating, now())
+    if (result.ok) opts.onActivity?.() // plan re-materializes off study writes (debounced upstream)
+    return result
   })
 }

@@ -3,6 +3,7 @@ import type {
   Outline, LessonDetail, LessonRef, MarkCompleteResult,
   DisciplineTreeDto, TagVocabEntry, StartSessionInput, StartSessionResult,
   SubmitAnswerInput, SubmitAnswerResult, SessionSummary, StatsOverview, QuestionRef,
+  PlanView, SavePlanSettingsInput, SavePlanSettingsResult, PlanPrefDto, SetPlanTaskStatusInput, PlanTaskDto,
   DeckSetSummary, DeckNode, ListCardsInput, CardListPage, CardView,
   ReviewCounts, ReviewQueueItem, ReviewRating, ReviewCardResult
 } from './dto'
@@ -45,6 +46,13 @@ export interface FreecatApi {
   }
   stats: {
     overview: () => Promise<StatsOverview>
+  }
+  plan: {
+    get: () => Promise<PlanView>
+    saveSettings: (input: SavePlanSettingsInput) => Promise<ServiceResult<SavePlanSettingsResult>>
+    savePrefs: (prefs: PlanPrefDto[]) => Promise<ServiceResult<null>>
+    setTaskStatus: (input: SetPlanTaskStatusInput) => Promise<ServiceResult<PlanTaskDto>>
+    regenerate: () => Promise<ServiceResult<null>>
   }
   flashcards: {
     importDeck: () => Promise<ServiceResult<DeckSetSummary>>

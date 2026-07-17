@@ -65,6 +65,8 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
                 │               │               │
         ┌───────▼───────────────▼───────────────▼────────┐
         │        4. Stats (read-only analytics)           │
+        ├─────────────────────────────────────────────────┤
+        │   5. Plan (adaptive daily plan; reads 1–4)      │
         └─────────────────────────────────────────────────┘
 ```
 
@@ -81,6 +83,8 @@ FreeCAT is a **Foundation** (the shared substrate) plus **three independent modu
 - **Module 3 — Flashcards** (deep Anki). A faithful local Anki reviewer; the most self-contained module — its content is user-imported (bring-your-own decks), so it integrates loosely (tag-based) rather than through the authored-content pipeline. **Deep-B scope:** import `.apkg`/`.colpkg` (legacy and modern zstd/protobuf formats), general note-type/template rendering, cloze, media (image + audio), MathJax, tags + deck/subdeck tree, **FSRS** scheduling, honoring a deck's existing scheduling history when present, and **image occlusion** (the single biggest lift). Out: AnkiWeb sync, export to `.apkg`, filtered decks, arbitrary add-ons. (`ts-fsrs` is a candidate library; sat-world's `src/lib/srs/*` is a reference/fallback, not FSRS.)
 
 - **Module 4 — Stats** (read-only analytics). **Built** (spec `2026-07-17-stats-design.md`; part of the SAT World port roadmap `2026-07-17-satworld-port-roadmap.md`). Bayesian per-topic mastery rolled up section→discipline→topic, error fingerprints, self-relative pacing, activity heatmap, effort trend, and the FSRS queue — computed live from the other modules' raw tables on every open (no rollups/caches, no migration). Owns **no tables and no writes**; absorbed the old qbank accuracy dashboard. Plan (Module 5, exam-date pacing) builds on top of it in roadmap Phases 2–4.
+
+- **Module 5 — Plan** (adaptive daily plan). **Engine built** (roadmap `2026-07-17-satworld-port-roadmap.md` Phase 2; UI arrives in Phase 3). The ported sat-world planner, reshaped for a personal app: an exam date (optional — habit mode without one) drives a today+6 daily plan across flashcards (FSRS pacing triangle, `rampDays` derived by simulating the live scheduler), topic practice (AAMC-blueprint-weighted priority × need × staleness × exploration), spaced mistake review (`refine='incorrect'`), and always-optional auto-offered lessons. Re-plans event-driven: app launch, settings/prefs saves, and debounced after study writes. Comfort ratings (discipline-level, topic override) feed planner priors ONLY — never Stats. Owns migration `0007` (`plan_settings`, `plan_task`, `plan_taxonomy_pref`, `plan_lesson_offer`).
 
 **Recommended build order:** Foundation → Qbank → Content Review → Flashcards. After the Foundation, order is flexible.
 
@@ -111,6 +115,7 @@ One SQLite file, one Drizzle schema, split by ownership:
 - **Content Review owns:** lesson progress.
 - **Flashcards owns:** imported decks, notes, note types/templates, cards, media references, and per-card scheduling/review state.
 - **Stats owns:** nothing — strictly read-only over qbank/flashcards/content/gamification data (spec `2026-07-17-stats-design.md`). It never writes any table, including gamification (looking at your stats is not study).
+- **Plan owns:** `plan_settings`, `plan_task`, `plan_taxonomy_pref`, `plan_lesson_offer` (migration `0007`). Everything else it reads read-only (attempts, FSRS state, lesson progress); other modules never write plan tables. Cross-module regeneration triggers are wired as optional callbacks by `src/main/index.ts` — qbank/flashcards/content-review know a callback, not the Plan module.
 
 Modules add their own tables and migrations; they reference Foundation tables by id but never alter Foundation-owned tables' meaning.
 

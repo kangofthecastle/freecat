@@ -50,6 +50,13 @@
       "when": 1783428133619,
       "tag": "0006_faulty_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1784282493447,
+      "tag": "0007_known_abomination",
+      "breakpoints": true
     }
   ]
 }

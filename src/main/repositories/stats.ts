@@ -1,10 +1,11 @@
 import { isNotNull } from 'drizzle-orm'
 import type { DB } from '../db/client'
-import { qbankAttempt, reviewLog, cardScheduling, lessonProgress, dailyActivity } from '../db/schema'
+import { reviewLog, cardScheduling, lessonProgress, dailyActivity } from '../db/schema'
 import type {
   StatsOverview, SectionStatsDto, DisciplineStatsDto, TopicStatsDto, MasteryDto,
-  TopicFingerprintDto, SectionPacingDto, AamcAccuracy, ChoiceLetter, DisciplineKey
+  TopicFingerprintDto, SectionPacingDto, AamcAccuracy, DisciplineKey
 } from '../../shared/dto'
+import { loadAttempts, latestPerQuestion } from './attempt-evidence'
 import type { ContentIndex, SectionCode } from '../content/types'
 import { CONTENT_TAG_VOCAB } from '../content/tags'
 import {
@@ -26,18 +27,6 @@ const TOPIC_DISCIPLINE: ReadonlyMap<string, DisciplineKey> = new Map(TOPICS.map(
 const AAMC_TITLE: ReadonlyMap<string, string> = new Map(
   CONTENT_TAG_VOCAB.map((t) => [`${t.vocab}:${t.code}`, t.title])
 )
-
-interface AttemptRow {
-  id: number
-  questionId: string
-  topic: string
-  discipline: string
-  section: string
-  chosen: ChoiceLetter
-  isCorrect: boolean
-  timeMs: number | null
-  answeredAt: Date
-}
 
 const toMasteryDto = (r: MasteryResult, published: number): MasteryDto => ({
   mastery: r.mastery,
@@ -67,19 +56,7 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
 
   // The six reads are independent — issue them together rather than serializing round trips.
   const [attempts, flaggedList, reviews, lessonsDone, activityRows, scheduling] = await Promise.all([
-    db
-      .select({
-        id: qbankAttempt.id,
-        questionId: qbankAttempt.questionId,
-        topic: qbankAttempt.topic,
-        discipline: qbankAttempt.discipline,
-        section: qbankAttempt.section,
-        chosen: qbankAttempt.chosen,
-        isCorrect: qbankAttempt.isCorrect,
-        timeMs: qbankAttempt.timeMs,
-        answeredAt: qbankAttempt.answeredAt
-      })
-      .from(qbankAttempt) as Promise<AttemptRow[]>,
+    loadAttempts(db),
     listFlaggedIds(db),
     db.select({ rating: reviewLog.rating, reviewedAt: reviewLog.reviewedAt }).from(reviewLog),
     db
@@ -98,17 +75,8 @@ export async function getStatsOverview(db: DB, index: ContentIndex, opts: StatsO
   ])
   const flaggedIds = new Set(flaggedList)
 
-  // ── Latest attempt per question (mastery evidence; answeredAt then row id breaks ties) ──
-  const latestByQuestion = new Map<string, AttemptRow>()
-  for (const a of attempts) {
-    const prev = latestByQuestion.get(a.questionId)
-    if (!prev) {
-      latestByQuestion.set(a.questionId, a)
-      continue
-    }
-    const dt = a.answeredAt.getTime() - prev.answeredAt.getTime()
-    if (dt > 0 || (dt === 0 && a.id > prev.id)) latestByQuestion.set(a.questionId, a)
-  }
+  // ── Latest attempt per question (mastery evidence; shared reduction with the Plan module) ──
+  const latestByQuestion = latestPerQuestion(attempts)
   const latestByTopic = new Map<string, MasteryAttempt[]>()
   for (const a of latestByQuestion.values()) {
     const m: MasteryAttempt = {

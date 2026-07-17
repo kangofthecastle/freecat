@@ -14,7 +14,13 @@ import type { LessonStore } from '../content/lessons'
 export const slugSchema = z.string().min(1).max(128)
 export const markCompleteSchema = z.object({ slug: z.string().min(1).max(128), completed: z.boolean() })
 
-export function registerContentReviewIpc(db: DB, store: LessonStore): void {
+export interface ContentReviewIpcOptions {
+  /** Fired after a lesson is marked complete — main/index.ts wires the plan's debounced
+   *  regeneration here (this module knows a callback, not the Plan module). */
+  onActivity?: () => void
+}
+
+export function registerContentReviewIpc(db: DB, store: LessonStore, opts: ContentReviewIpcOptions = {}): void {
   ipcMain.handle(CH.contentGetOutline, async (): Promise<Outline> => {
     const [taxonomy, progress] = await Promise.all([listDisciplinesWithTopics(db), getAllProgress(db)])
     return composeOutline(taxonomy, store.list(), progress)
@@ -47,8 +53,14 @@ export function registerContentReviewIpc(db: DB, store: LessonStore): void {
 
   ipcMain.handle(CH.contentMarkComplete, async (_e, raw: unknown): Promise<ServiceResult<MarkCompleteResult>> => {
     const p = markCompleteSchema.parse(raw)
-    if (p.completed) return completeLesson(db, p.slug)
+    if (p.completed) {
+      const result = await completeLesson(db, p.slug)
+      if (result.ok) opts.onActivity?.()
+      return result
+    }
     await setCompleted(db, p.slug, false)
+    // Un-completing also re-plans: lessonCompleted gates the plan's lesson offers/reteach.
+    opts.onActivity?.()
     const row = await getProgressForSlug(db, p.slug)
     return ok({ status: deriveStatus(row) })
   })

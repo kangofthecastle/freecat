@@ -38,3 +38,10 @@ export function weekdayIndex(key: string): number {
   const [y, m, d] = parseKey(key)
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
+
+/** Whole-day number (days since epoch) of a day key — the one implementation of key→number for
+ *  day differences, so windows computed in different modules can never disagree. */
+export function dayNumberOfKey(key: string): number {
+  const [y, m, d] = parseKey(key)
+  return Date.UTC(y, m - 1, d) / 86_400_000
+}

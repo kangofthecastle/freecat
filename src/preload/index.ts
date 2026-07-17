@@ -40,6 +40,13 @@ const api: FreecatApi = {
   stats: {
     overview: () => ipcRenderer.invoke(CH.statsOverview)
   },
+  plan: {
+    get: () => ipcRenderer.invoke(CH.planGet),
+    saveSettings: (input) => ipcRenderer.invoke(CH.planSaveSettings, input),
+    savePrefs: (prefs) => ipcRenderer.invoke(CH.planSavePrefs, prefs),
+    setTaskStatus: (input) => ipcRenderer.invoke(CH.planSetTaskStatus, input),
+    regenerate: () => ipcRenderer.invoke(CH.planRegenerate)
+  },
   flashcards: {
     importDeck: () => ipcRenderer.invoke(CH.fcImportDeck),
     listDeckSets: () => ipcRenderer.invoke(CH.fcListDeckSets),
