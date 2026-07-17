@@ -152,6 +152,43 @@ describe('planDiagnosticSession', () => {
     expect(result.passages['bio-pass-1']).toBeTruthy()
   })
 
+  it('never blows the total target: an oversized passage that no longer fits is left behind', async () => {
+    const mkPassage = (
+      discipline: DisciplineKey,
+      topic: string,
+      pid: string,
+      n: number
+    ): { subs: QuestionContent[]; passage: PassageContent } => {
+      const ids = Array.from({ length: n }, (_, i) => `${pid}-q${i + 1}`)
+      return {
+        subs: ids.map((id) => q(id, discipline, topic, { passageId: pid })),
+        passage: { id: pid, topic, discipline, section: 'chem-phys', passage: 'prose', questionIds: ids }
+      }
+    }
+    // Two disciplines, each holding ONLY a 12-question passage. The first fits (0+12 ≤ 15); the
+    // second would land at 24 — before the fit rule this returned 24 questions for a "~15" probe.
+    const a = mkPassage('physics', 'physics.mechanics', 'pass-a', 12)
+    const b = mkPassage('biology', 'biology.cells', 'pass-b', 12)
+    const result = await planDiagnosticSession(
+      makeIndex([...a.subs, ...b.subs], [a.passage, b.passage]),
+      db,
+      { now: NOW, rng: rng0 }
+    )
+    expect(result.questions).toHaveLength(12)
+    expect(Object.keys(result.passages)).toHaveLength(1)
+  })
+
+  it('a bank whose ONLY unit is an oversized passage still probes it (never blocks on shape)', async () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `big-q${i + 1}`)
+    const subs = ids.map((id) => q(id, 'physics', 'physics.mechanics', { passageId: 'big' }))
+    const passage: PassageContent = {
+      id: 'big', topic: 'physics.mechanics', discipline: 'physics', section: 'chem-phys',
+      passage: 'prose', questionIds: ids
+    }
+    const result = await planDiagnosticSession(makeIndex(subs, [passage]), db, { now: NOW, rng: rng0 })
+    expect(result.questions).toHaveLength(20) // documented overshoot beats an empty diagnostic
+  })
+
   it('prefers standalones over passages when both exist in a discipline', async () => {
     const standalone = [1, 2, 3].map((n) => q(`o-chem-s${n}`, 'o-chem', 'o-chem.reactions'))
     const sub = q('o-chem-p1', 'o-chem', 'o-chem.reactions', { passageId: 'oc-pass' })

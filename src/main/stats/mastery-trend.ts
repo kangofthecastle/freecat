@@ -18,8 +18,10 @@ export interface TrendAttempt {
 
 /**
  * As-of-day mastery per section (roadmap Phase 4) — recomputation, not snapshots: each day's value
- * is exactly what the live mastery panel would have shown at that day's end (same `computeMastery`,
- * latest-attempt-per-question as of that day). One sorted pass with an incremental latest map keeps
+ * is what the live mastery panel would have shown at that day's end (same `computeMastery`,
+ * latest-attempt-per-question as of that day), with ONE deliberate divergence: flag state has no
+ * history, so today's flags apply to every day — a flag toggled long after answering retroactively
+ * re-weights old points. One sorted pass with an incremental latest map keeps
  * this O(days × distinctQuestions) — cheap at personal scale, which is why there is deliberately no
  * cache (the roadmap's "only if profiling says so").
  *

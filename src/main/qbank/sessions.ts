@@ -199,12 +199,15 @@ function diagnosticUnits(index: ContentIndex, discipline: string, rng: Rng): str
 }
 
 /**
- * Compose the cold-start diagnostic (roadmap Phase 4): a few mid-difficulty questions from EVERY
- * discipline, so the planner's comfort priors meet real evidence early. Round-robin across
- * disciplines up to `perDisciplineCap` questions each and `targetTotal` overall — a thin bank
- * degrades to whatever exists (never blocks on missing content). The mode is server-assigned:
- * no IPC input can request 'diagnostic'. Attempts recorded here are ordinary mastery evidence by
- * design — nothing anywhere filters attempts by session mode.
+ * Compose the cold-start diagnostic (roadmap Phase 4): a few mid-difficulty questions from every
+ * discipline that can afford them, so the planner's comfort priors meet real evidence early.
+ * Round-robin across disciplines up to `perDisciplineCap` questions each and `targetTotal`
+ * overall — a thin bank degrades to whatever exists (never blocks on missing content). When a
+ * discipline's only content is passages, the SIZE promise outranks full coverage: an oversized
+ * passage that no longer fits the target is skipped (that discipline waits for ordinary practice)
+ * rather than doubling the length of a probe that is sold as "about 15 questions". The mode is
+ * server-assigned: no IPC input can request 'diagnostic'. Attempts recorded here are ordinary
+ * mastery evidence by design — nothing anywhere filters attempts by session mode.
  */
 export async function planDiagnosticSession(
   index: ContentIndex,
@@ -224,12 +227,26 @@ export async function planDiagnosticSession(
     for (const lane of lanes) {
       if (chosenIds.length >= DIAGNOSTIC_CONFIG.targetTotal) break
       if (lane.taken >= DIAGNOSTIC_CONFIG.perDisciplineCap) continue
-      const unit = lane.units.shift()
+      // Take the lane's first unit that still FITS the overall target: standalones (size 1)
+      // always fit, while an oversized passage stays behind rather than blowing the "about 15
+      // questions" promise (a passage that fits may still overshoot the per-discipline cap —
+      // that overshoot is the accepted atomicity cost; the total is the hard-ish bound).
+      const idx = lane.units.findIndex((u) => chosenIds.length + u.length <= DIAGNOSTIC_CONFIG.targetTotal)
+      if (idx === -1) continue
+      const [unit] = lane.units.splice(idx, 1)
       if (!unit) continue
       chosenIds.push(...unit)
       lane.taken += unit.length
       progressed = true
     }
+  }
+  // A bank whose every unit is an oversized passage must still probe SOMETHING — never block on
+  // content shape. Take the single smallest unit anywhere and accept the overshoot, documented.
+  if (chosenIds.length === 0) {
+    const smallest = lanes
+      .flatMap((l) => l.units)
+      .reduce<string[] | null>((best, u) => (best === null || u.length < best.length ? u : best), null)
+    if (smallest) chosenIds.push(...smallest)
   }
 
   const session = await createSession(db, {

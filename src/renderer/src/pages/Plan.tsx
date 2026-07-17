@@ -131,7 +131,12 @@ export default function Plan(props: PageProps): React.JSX.Element {
         disciplines={disciplines}
         initial={view.settings}
         onDone={() => void load()}
-        onDiagnostic={() => navigate?.('qbank', { qbankDiagnostic: { start: true } })}
+        // Refetch BEFORE navigating away so this page never holds a stale onboardedAt — today the
+        // route switch unmounts us anyway, but the invariant must not depend on that.
+        onDiagnostic={() => {
+          void load()
+          navigate?.('qbank', { qbankDiagnostic: { start: true } })
+        }}
       />
     )
   }

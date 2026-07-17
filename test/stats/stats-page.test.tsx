@@ -73,6 +73,20 @@ describe('Stats page', () => {
     expect(screen.getByText(/last 132 days — stretched back/)).toBeTruthy()
   })
 
+  it('trend legend shows TODAY only — a decayed-back-to-needs-data section never shows a stale score', async () => {
+    const o = emptyOverview()
+    o.masteryTrend = [
+      { day: '2026-07-16', sections: { 'chem-phys': 0.7, 'bio-biochem': null, 'psych-soc': null } },
+      // Evidence decayed below the floor with no new attempts: today is honestly null again.
+      { day: '2026-07-17', sections: { 'chem-phys': null, 'bio-biochem': null, 'psych-soc': null } }
+    ]
+    stub(o)
+    render(<Stats />)
+    await waitFor(() => expect(screen.getByLabelText('Mastery over time per section')).toBeTruthy())
+    expect(screen.queryByText('70%')).toBeNull()
+    expect(screen.getAllByText('· needs data').length).toBe(3)
+  })
+
   it('needsData topics render a badge instead of a confident bar; scored topics show a percent', async () => {
     const o = emptyOverview()
     o.totals = { answered: 3, correct: 2, distinctQuestions: 3, reviews: 0, lessonsCompleted: 0 }

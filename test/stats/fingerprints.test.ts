@@ -3,6 +3,7 @@ import {
   classifyFingerprints, timeBaselines, fingerprintEvidence, selectRecencyWindow,
   type FingerprintAttempt
 } from '../../src/main/stats/fingerprints'
+import { addDaysToKey } from '../../src/shared/gamification/dates'
 
 const NOW = new Date('2026-07-17T12:00:00Z')
 const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000)
@@ -128,10 +129,8 @@ describe('selectRecencyWindow (Phase 4 adaptive widening)', () => {
   const days = (n: number, from: string, perDay = 1): { id: number; answeredAt: Date }[] => {
     const out: { id: number; answeredAt: Date }[] = []
     let id = 1
-    let day = from
     for (let i = 0; i < n; i++) {
-      for (let k = 0; k < perDay; k++) out.push(onDay(day, id++))
-      day = day < '2027' ? `${day.slice(0, 8)}${String(Number(day.slice(8)) + 1).padStart(2, '0')}` : day
+      for (let k = 0; k < perDay; k++) out.push(onDay(addDaysToKey(from, i), id++))
     }
     return out
   }

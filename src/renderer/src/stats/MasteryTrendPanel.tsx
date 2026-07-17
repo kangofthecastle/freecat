@@ -90,8 +90,9 @@ export function MasteryTrendPanel({ trend }: { trend: MasteryTrendDayDto[] }): R
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-4">
               {bySection.map(({ meta }) => {
-                const latest = [...trend].reverse().find((d) => d.sections[meta.code] != null)
-                const v = latest?.sections[meta.code]
+                // TODAY's value only — an older day's score would be a fake current score (evidence
+                // decays, so a section can honestly drop back to needs-data with no new attempts).
+                const v = trend[trend.length - 1]?.sections[meta.code]
                 return (
                   <span key={meta.code} className="flex items-center gap-1.5 text-xs text-gray-600">
                     <span className={`h-2 w-2 rounded-full ${meta.dotClass}`} />

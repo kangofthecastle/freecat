@@ -1,10 +1,10 @@
 import { sqliteTable, integer, text, uniqueIndex, index } from 'drizzle-orm/sqlite-core'
 import type { ChoiceLetter } from '../../../shared/dto'
 
-// A composed practice session. `mode` is 'tutor' for v1; a timed block drops in later with no migration.
+// A composed practice session. `mode` is plain text so new modes drop in with no migration.
 export const qbankSession = sqliteTable('qbank_session', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  mode: text('mode').notNull().default('tutor'), // 'tutor' | 'timed' (future)
+  mode: text('mode').notNull().default('tutor'), // 'tutor' | 'diagnostic' (server-assigned) | 'timed' (future)
   scopeKind: text('scope_kind').notNull(), // 'mixed' | 'discipline' | 'topic'
   scopeCode: text('scope_code'), // topic slug or discipline key when scoped, else null
   refine: text('refine').notNull().default('all'), // 'all' | 'incorrect' | 'flagged'
