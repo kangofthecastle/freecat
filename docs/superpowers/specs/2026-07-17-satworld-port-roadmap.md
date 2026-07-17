@@ -1,0 +1,84 @@
+# SAT World port roadmap — Stats + Plan for FreeCAT
+
+> **Status: draft for user review.** Umbrella roadmap, not a build spec — each phase below gets its own design spec + implementation plan before any code (house pattern). Read `docs/freecat-charter.md` first. This is the mirror image of sat-world's `docs/superpowers/specs/2026-06-26-freecat-port-roadmap.md`: that doc ported FreeCAT's Content Review + Questions machinery *into* sat-world; this one ports sat-world's two most built-out subsystems — the **analytics layer** and the **plan-tracks planner** (sat-world PR #30 design + PR #35 implementation, live on sat-world `main` as of 2026-07-16) — *back into* FreeCAT, adapted for a single-user, local-first, no-server Electron app. We port the machinery (pure computation, data shapes, UX concepts), not the classroom: no teachers, no tenants, no mocks, no cron.
+
+## Goal
+
+FreeCAT has all three content modules built (Qbank, Content Review, Flashcards with FSRS) but no brain on top: the only analytics surface is the qbank accuracy dashboard, and nothing knows about an exam date. After this port: open FreeCAT → a **Stats** module shows per-topic mastery (Bayesian, recency-decayed), error fingerprints, time-per-question pacing, and an activity heatmap, all computed live from data the app already records → a **Plan** module turns an MCAT exam date into a paced daily schedule across flashcards, questions, and lessons — and **re-plans automatically** as reviews, attempts, and preference changes land. Same trust posture as every module: all new IPC Zod-validated, no new content-execution surface, migrations additive only (charter §"never a re-migration").
+
+## What we port (and from where)
+
+sat-world enforces a strict pure/service split — every file under `src/lib/analytics/` and `src/lib/plan/` is explicitly DB-free ("Pure + DB-free" header convention); only the service layer touches Postgres. That split is exactly what makes this port cheap: **the pure layer is the port; the service layer is rewritten thin against SQLite/Drizzle + IPC.**
+
+| sat-world source (pure) | Fate in FreeCAT |
+|---|---|
+| `src/lib/analytics/mastery.ts` — `computeMastery`: Bayesian-shrunk accuracy, recency decay `exp(-ageDays/21d)`, difficulty weights, `needsData`/`stale` flags, coverage | Port ≈ verbatim → `src/main/stats/mastery.ts`. Skill = taxonomy **topic** (leaf of FreeCAT's discipline→topic tree); `publishedCount` from the content index. |
+| `src/lib/analytics/fingerprints.ts` — per-skill dominant error mode (timeout / repeated_distractor / careless_fast / slow_wrong) | Port with one deliberate fix (recency window — see Decisions). `qbank_attempt` already has `chosen`, `isCorrect`, `timeMs`. |
+| `src/lib/analytics/effort.ts`, `calendar-grid.ts`, `insights.ts` | Port; drop mock terms from effort weights; re-write `insights.ts` coaching copy + pacing benchmarks for MCAT (SAT 95s/71s-per-Q benchmarks don't transfer). |
+| `src/lib/analytics/config.ts` — `ANALYTICS_CONFIG` + `PLAN_CONFIG` tunables | Port as `src/main/stats/config.ts` + `src/main/plan/config.ts`; strip tenant/mock keys. |
+| `src/lib/plan/planner.ts` (509 lines) — `priority`, `materializeDay`, `budgetForDay`, `greedyFill`, all planner types | Port core, minus mock-window logic (`isMockDay`, `chooseMockDayIndex`, mock gates) — deleted, not stubbed. |
+| `src/lib/plan/pacing.ts` — the pacing triangle (`rampDays`, `vocabTriangle`, `validateVocabPacing`) | Port the triangle; **re-derive `rampDays` for FSRS** (see Decisions — this is the one piece of real math work). |
+| `src/lib/plan/track-budget.ts`, `pacing-inputs.ts`, `progress.ts`, `comfort.ts`, `diagnostic.ts`, `task-meta.ts` | Port, simplified to the surviving tracks. |
+| `src/lib/plan/deck-order.ts` — deterministic md5 shuffle | Port (single user: key on `cardId` alone); backs the `newCardOrder: 'shuffled'` option. |
+
+**Not ported, deliberately:** mocks track + `mock-report.ts`/`scaled-score.ts` (FreeCAT has no mock exams and never will); all teacher machinery (pacing controls, exclusion **locks**, adherence rosters, behind-pace teacher warnings); multi-tenancy, roles, feature flags; cron routes (`api/cron/plan`, `api/cron/snapshots`) and `CRON_SECRET`; `better-auth`; the rollup tables `user_skill_daily` + `mastery_snapshots` and the entire `analytics:rebuild` apparatus (see Decisions — biggest architectural simplification of the port).
+
+## Decisions (locked)
+
+- **Two-and-a-half tracks, all self-paced.** sat-world's four tracks (flashcards student-paced / questions teacher-paced / lessons optional / mocks teacher-windowed) collapse to: **Flashcards** (self-paced via the FSRS triangle), **Questions** (self-paced, exam-date-driven — the user owns the start day + finish buffer that sat-world gave teachers, defaults 0/0 = start now, finish by exam), **Lessons** (always optional, budget-exempt, auto-offered on first topic encounter — ported unchanged). Mocks: deleted. Every "teacher-paced" knob becomes a user setting; exclusion *locks* become plain self-set exclusions.
+- **No materialized rollups.** sat-world needs `user_skill_daily` + `mastery_snapshots` + `analytics:rebuild` because it serves many students from Postgres behind a web app. FreeCAT is one user on local SQLite: Stats computes **on demand from raw tables** — `qbank_attempt` (already denormalized with topic/discipline/section + `timeMs` + `answeredAt`, blanks impossible by schema), `review_log` + `card_scheduling` (FSRS), `lesson_progress`, `daily_activity`. Mastery-over-time renders by running `computeMastery` as-of each day over the raw attempt stream. This deletes the whole rebuild/drift bug class sat-world's B-findings catalogue documents (stale rollups, blank-timeout pollution, backfill). Escape hatch if profiling ever demands it: a lazy per-day cache table, rebuildable by `DELETE`, never authoritative.
+- **One time convention: device-local dayKeys everywhere**, via the gamification module's existing `dayKeyInTz(now, appTz())` (already the convention for `daily_activity` and `introducedDay`). All windowed metrics ("last 7d") mean **7 local calendar days**, never rolling-instant cutoffs. This resolves sat-world's B10 (mixed 7d conventions) and B13 (global `APP_TZ`) by construction rather than by porting the ambiguity.
+- **`rampDays` re-derived for FSRS, by simulation.** sat-world derives `rampDays` (days from a card's first review to interval ≥ `MASTERY_INTERVAL_DAYS = 21`) by walking SM-2 Good-intervals from `SRS_CONFIG` (1→3→7→17 ⇒ 28 days at its defaults). FreeCAT runs `ts-fsrs` — no `startingEase`/`hardFactor` to walk. Replacement: **numeric simulation** — schedule a synthetic card with FreeCAT's exact FSRS instance (`generatorParameters({ enable_fuzz: false, enable_short_term: true })`, per the M2 spec), rate Good at each due date, accumulate days until `scheduledDays >= 21`. Computed once at startup from the live config (so retuning FSRS params retunes the triangle automatically, same property as sat-world), and validated in tests against a real `schedule()` run — mirroring how sat-world's own tests validate `rampDays` rather than trusting closed-form. `MASTERY_INTERVAL_DAYS = 21` itself is scheduler-agnostic and carries over. Triangle semantics unchanged: promise is **introductions, never mastery**; user sets *either* daily-new *or* goal % and the other is derived, never silently raising workload; `NEW_PER_DAY = 20` (M2) becomes the triangle's default/ceiling input instead of a lone constant.
+- **Event-driven re-planning replaces cron.** sat-world regenerates via nightly Vercel cron + rate-limited on-demand triggers. FreeCAT regenerates in the main process: (1) on app launch (covers the "overnight" roll), (2) on exam-date / pacing / exclusion changes, (3) debounced after activity writes (qbank grade, flashcard review, lesson completion) — this is the "dynamically updates" requirement, and it's *better* than sat-world's nightly batch because the plan reacts within the session. Ported invariant: regeneration materializes today+6 and replaces **only future `pending` rows** — `started`/`completed`/`skipped`/`expired` history survives. (Teacher-pinned tasks don't exist here; pinning is dropped.)
+- **Exam date optional → habit mode.** No exam date ⇒ triangle and questions-pacing dormant; Plan still materializes a day from the daily minute budget: FSRS dues + weakest-topic question sets + lesson offers. Setting the date later re-validates the triangle (`dailyNewTarget` kept, goal derived down — never raises workload, same rule as sat-world). This fixes sat-world's old A12 dead-end ("no exam date = planner inert") in the way that fits a personal app.
+- **Comfort ratings port, planner-only, discipline-level.** Same firewall as sat-world: comfort (1–5) feeds planner priors (`comfortToPrior`, `comfortNeedFactor`) and **never** Stats. Granularity changes: MCAT's topic tree is too wide to rate at onboarding, so comfort is collected per **discipline** (~10 ratings) and inherited by child topics; per-topic override only where the user has actually rated one. Unrated ⇒ neutral 0.5 prior, ×1.0 need factor — exact sat-world semantics.
+- **Fix-forward on known findings — don't re-import documented flaws.** From sat-world's `2026-07-15-review-findings.md`: fingerprints/pacing get a **recency window** (last 60 local days) instead of all-time aggregation (B9); windowing convention unified (B10, above); skip-rate is displayed next to the plan streak so skipping-everything can't read as perfection (A5, personal-scale variant: information for the user, no enforcement).
+- **Difficulty weight defaults to 1.0.** sat-world's mastery weights attempts by question difficulty (1/1.5/2 ×). FreeCAT content has no difficulty tag yet — the port keeps the parameter, feeds 1.0, and picks up real weights for free if/when the content schema grows difficulty.
+- **Module boundaries per charter §5.2.** Stats (Module 4) owns **no tables** — strictly read-only over other modules' raw data. Plan (Module 5) owns `plan_settings`, `plan_task`, `plan_topic_pref`, `plan_lesson_offer` and reads everything else read-only; it never writes other modules' tables (gamification credit keeps flowing from the underlying activities themselves — completing a plan task awards nothing extra, avoiding double-award).
+- **Pure/service split preserved, FreeCAT-shaped.** Pure DB-free engines in `src/main/stats/` and `src/main/plan/` (file-per-concern, mirroring sat-world's layout); thin repositories translate Drizzle rows → plain-object inputs → pure fn → persist; IPC handlers in `src/main/ipc/{stats,plan}.ts` stay Zod-validated dumb pipes; display-only helpers (`calendar-grid` geometry, insight copy) live renderer-side.
+
+## Architecture mapping
+
+| Concern | sat-world | FreeCAT |
+|---|---|---|
+| Storage | Postgres (Neon) + Drizzle, multi-tenant rows | local SQLite + Drizzle/libsql, single profile |
+| Raw events | `question_attempts`, `mock_attempts`, `activity_time` | `qbank_attempt`, `review_log`, `daily_activity`, `lesson_progress` — **already recorded, no backfill needed** |
+| Skill identity | `skill_id` (29 subtopics × difficulty) | `taxonomy_node` topic slug (discipline→topic tree) |
+| Aggregation | rollup tables + cron snapshots + rebuild CLI | on-demand SQL/JS over raw tables |
+| Re-plan trigger | nightly cron + rate-limited on-demand | launch + settings change + debounced activity writes |
+| Pacing authority | teacher (questions/mocks), student (flashcards) | user (everything) |
+| SRS coupling | SM-2 `SRS_CONFIG` interval walk ⇒ `rampDays=28` | `ts-fsrs` simulation ⇒ `rampDays` computed at startup |
+| Plan surface | Next.js student pages + teacher panels | `Plan.tsx` + `Stats.tsx` pages in `App.tsx` `ROUTES`, `src/renderer/src/{plan,stats}/` |
+
+## Phases (sequential; one spec + plan + PR each)
+
+### Phase 1 — Stats (Module 4): the analytics port
+
+Read-only module; **no migration**. Port the pure engines (`mastery`, `fingerprints`, `effort`, `calendar-grid`, config) into `src/main/stats/`; write the one new repository that assembles their inputs from `qbank_attempt` / `review_log` / `card_scheduling` / `lesson_progress` / `daily_activity` + content index; `src/main/ipc/stats.ts`; `Stats.tsx` page (mastery by discipline→topic with needs-data/stale flags, coverage, error fingerprints, time-per-question pacing, activity heatmap, effort trend, flashcard workload from FSRS state). The existing qbank `Dashboard.tsx` / `qbank-analytics.ts` accuracy view is absorbed into Stats (qbank keeps a link; one analytics surface, not two). Deliverable: a Stats page that would have been honest about every number even if Plan never ships.
+
+### Phase 2 — Plan engine (Module 5, M1): schema + pure planner + regeneration
+
+Migration `0007` (additive): `plan_settings` singleton (nullable `examDate`, `dailyBudgetMinutes`, `dailyNewTarget`, `masteryGoalPct`, `finishBufferDays`, `questionsStartDay`, `questionsFinishBufferDays`, `newCardOrder 'deck'|'shuffled'`, `onboardedAt`), `plan_task` (dayKey, kind `'flashcards'|'questions'|'lesson'`, `taxonomyRef`, target count/minutes, status `pending|started|completed|skipped|expired`, `optional`), `plan_topic_pref` (topicSlug, comfort, excluded), `plan_lesson_offer` (lessonSlug, offeredAt — durable dedup, deliberately not a `plan_task` row, same reasoning as sat-world). Port planner core + triangle (FSRS `rampDays` simulation + golden tests) + track budget + comfort + progress helpers; `regeneratePlan` repository with the three trigger paths; today+6 materialization. Deliverable: engine + tests green, plan rows visible via a debug IPC call — no UI yet.
+
+### Phase 3 — Plan UI (Module 5, M2): onboarding + daily surface
+
+Onboarding wizard (exam date → triangle pick-one-derive-other with live validation → discipline comfort ratings → budget), Today view (task list with start/complete/skip, deep-links into Qbank/Flashcards/Content via existing `navigate(key, payload)`), week strip, plan streak + on-track status **with skip-rate shown beside it** (A5), behind-pace nudge (personal, dismissible — the ported `questionsBehindPace` math minus the teacher warning surface), settings panel (re-triangle on change), lesson auto-offers surfacing. Watch for the onboarding-unmount-on-save regression sat-world's end-to-end reviewer caught in PR #35 — same wizard shape, same risk.
+
+### Phase 4 — Dynamic refinement (Module 5, M3)
+
+Diagnostic mode: `qbank_session.mode` gains `'diagnostic'` (Zod/text only — no migration), 1–2 mid-difficulty questions per discipline (~15 total) whose attempts count as ordinary mastery evidence, offered from onboarding for cold-start priors. Mastery-over-time trend view in Stats (as-of-day recomputation; add the lazy cache here *only* if profiling says so). Recency-window tuning for fingerprints against real usage. Comfort re-rating surface (sat-world deferred "does comfort decay?" — we answer it here with data).
+
+Charter updates ride each phase's PR: new module briefs + ASCII-map boxes for Stats/Plan, §5.2 ownership lines as stated above.
+
+## Open questions by phase
+
+- **(1)** Should section-level (Chem/Phys, CARS, Bio/Biochem, Psych/Soc) rollups appear in Stats v1, or discipline→topic only? `qbank_attempt.section` is already denormalized, so it's cheap either way.
+- **(1)** MCAT pacing benchmarks for `insights.ts` copy: AAMC per-section seconds-per-question, or self-relative only (vs. own median) until content volume justifies absolute benchmarks?
+- **(2)** Blueprint weights: sat-world's `examWeightsWithinSubject` encodes the SAT blueprint. Port equivalent from AAMC section/discipline weightings (content tags carry AAMC codes via `CONTENT_TAG_VOCAB`), or ship v1 with uniform weights and let coverage/mastery drive priority alone?
+- **(2)** Questions-track budget unit: minutes (sat-world) vs. question-count (qbank sessions are count-based)? Leaning count with a minutes estimate for the budget split.
+- **(3)** Does completing every task in a day earn a gamification bonus (new `recordActivity` kind, e.g. `'plan.day'`), or is the pet economy already saturated by the underlying activities? (Charter says gamification hooks are cheap; double-award is the thing to avoid.)
+- **(4)** Comfort decay/re-ask cadence — sat-world punted; propose: prompt re-rate per discipline after 30 local days of no rating change *and* mastery divergence from the prior.
+
+## Out of scope (this roadmap)
+
+Mock exams (permanently); teacher/parent anything; multi-profile support; cloud sync of plan state; FSRS parameter optimization from revlog (separate flashcards M3 concern); porting sat-world content or its SAT taxonomy; packaging/release CI (C8 — still the standing module-agnostic gap, unchanged by this work).
